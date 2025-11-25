@@ -145,21 +145,17 @@
                         <h3 class="text-lg font-bold text-blue-800 mb-4 flex items-center">
                             🚀 Nhập Liệu Hàng Loạt (Excel + Ảnh)
                         </h3>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-semibold text-gray-700 mb-1">1. File Đáp án (Excel)</label>
                                 <input type="file" id="batch-excel" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
                                 <p class="text-xs text-gray-500 mt-1">Cột A: STT, Cột B: Đáp án</p>
                             </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">2. Ảnh Câu hỏi (Chọn nhiều)</label>
-                                <input type="file" id="batch-q-imgs" multiple accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
-                                <p class="text-xs text-gray-500 mt-1">Tên file chứa số câu (VD: cau1.jpg, 1.png)</p>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-gray-700 mb-1">3. Ảnh Lời giải (Tùy chọn):</label>
-                                <input type="file" id="batch-s-imgs" multiple accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
-                                <p class="text-xs text-gray-500 mt-1">Tùy chọn. Tên file chứa số câu.</p>
+                            <!-- Sửa: Gộp 2 ô nhập ảnh thành 1 -->
+                            <div class="md:col-span-1">
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">2. Ảnh Câu hỏi & Lời giải (Chọn nhiều)</label>
+                                <input type="file" id="batch-all-imgs" multiple accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
+                                <p class="text-xs text-gray-500 mt-1">Tên file phải chứa STT và có tiền tố: *Cau\_01...* (Câu hỏi) hoặc *Da\_01...* (Lời giải)</p>
                             </div>
                         </div>
                         <div class="mt-4 text-right">
@@ -411,27 +407,46 @@
             }
         }
 
-        // Helper function to extract number from filename (e.g. "cau1.jpg" -> 1)
-        function extractNumber(filename) {
-            const match = filename.match(/\d+/);
-            return match ? parseInt(match[0]) : null;
-        }
-
         // --- BATCH UPLOAD LOGIC ---
         window.processBatchEntry = async (btnElement) => {
+            // Hàm helper để trích xuất số và loại (q/s) dựa trên tiền tố Cau_xx, Da_xx
+            const extractNumberAndType = (filename) => {
+                const lowerName = filename.toLowerCase();
+                // Matches: Cau_01.jpg or Da_12.png or just number like 1.png
+                let match = lowerName.match(/^(cau|da)_(\d+)\./);
+                if (match) {
+                    return { 
+                        type: match[1] === 'cau' ? 'q' : 's', 
+                        number: parseInt(match[2], 10) 
+                    };
+                }
+                // Fallback (for older/simpler naming like 'cau1' or 'da1' or '1')
+                match = lowerName.match(/(\d+)/);
+                if(match) {
+                    const number = parseInt(match[1], 10);
+                    // Prioritize Da/S/Sol as solution, otherwise question
+                    if (lowerName.includes('da') || lowerName.includes('sol') || lowerName.includes('_s')) {
+                        return { type: 's', number };
+                    }
+                    // Default to question if only number is present and no type hint
+                    return { type: 'q', number };
+                }
+                return null;
+            }
+
             const excelInput = document.getElementById('batch-excel');
-            const qImgsInput = document.getElementById('batch-q-imgs');
-            const sImgsInput = document.getElementById('batch-s-imgs');
+            // Đã thay đổi: Lấy input ảnh gộp
+            const allImgsInput = document.getElementById('batch-all-imgs'); 
             const container = document.getElementById('questions-list');
             
             if(!excelInput.files[0]) return customAlert("Vui lòng chọn file Excel đáp án!");
-            if(qImgsInput.files.length === 0) return customAlert("Vui lòng chọn ảnh câu hỏi!");
+            if(allImgsInput.files.length === 0) return customAlert("Vui lòng chọn ảnh câu hỏi và lời giải!");
 
             const btn = btnElement || event.target;
             btn.disabled = true;
             btn.innerText = "Đang xử lý...";
 
-            // 1. Parse Excel
+            // 1. Parse Excel (Không đổi)
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
@@ -445,17 +460,19 @@
                     // Assumption: Column 0 is Order, Column 1 is Answer
                     const validRows = rows.filter(r => r[0] && r[1]);
                     
-                    // 2. Map Images
+                    // 2. Map Images (Đã thay đổi: Duyệt qua tất cả ảnh và phân loại)
                     const qImgMap = {};
                     const sImgMap = {};
                     
-                    Array.from(qImgsInput.files).forEach(f => {
-                        const num = extractNumber(f.name);
-                        if(num !== null) qImgMap[num] = f;
-                    });
-                     Array.from(sImgsInput.files).forEach(f => {
-                        const num = extractNumber(f.name);
-                        if(num !== null) sImgMap[num] = f;
+                    Array.from(allImgsInput.files).forEach(f => {
+                        const info = extractNumberAndType(f.name);
+                        if(info && info.number !== null) {
+                            if(info.type === 'q') {
+                                qImgMap[info.number] = f;
+                            } else if (info.type === 's') {
+                                sImgMap[info.number] = f;
+                            }
+                        }
                     });
 
                     // Clear current list if needed or append? Let's clear for batch
@@ -493,10 +510,6 @@
                         if(sFile) sBase64 = await fileToBase64(sFile);
 
                         // Create DOM Element
-                        // We use the existing addQuestion logic but populate it
-                        // Since addQuestion creates empty, we will create manually here for performance
-                        // and map values directly.
-                        
                         const div = document.createElement('div');
                         const idx = container.children.length; // Use current length for ID uniqueness
                         div.className = "card border border-gray-200 shadow-sm relative";
@@ -557,13 +570,14 @@
                                     <!-- Hidden input to store base64 from batch -->
                                     <input type="hidden" class="q-img-base64-hidden" value="${qBase64 || ''}">
                                     <img id="preview-q-${idx}" class="mt-2 h-32 object-contain ${qBase64 ? '' : 'hidden'} border rounded" src="${qBase64 ? 'data:image/png;base64,'+qBase64 : ''}">
-                                    ${!qBase64 ? '<p class="text-xs text-red-500 mt-1">⚠️ Không tìm thấy ảnh (VD: cau'+stt+'.jpg)</p>' : ''}
+                                    ${!qBase64 ? '<p class="text-xs text-red-500 mt-1">⚠️ Không tìm thấy ảnh Câu hỏi (VD: Cau_'+stt+'.jpg)</p>' : ''}
                                 </div>
                                 <div>
                                     <label class="text-sm font-semibold block mb-1">Ảnh Lời giải (Tùy chọn):</label>
                                     <input type="file" accept="image/*" class="text-sm q-sol-file" onchange="previewImage(this, 'preview-s-${idx}')">
                                     <input type="hidden" class="q-sol-base64-hidden" value="${sBase64 || ''}">
                                     <img id="preview-s-${idx}" class="mt-2 h-32 object-contain ${sBase64 ? '' : 'hidden'} border rounded" src="${sBase64 ? 'data:image/png;base64,'+sBase64 : ''}">
+                                    ${!sBase64 ? '<p class="text-xs text-gray-500 mt-1 italic">Không tìm thấy ảnh Lời giải (VD: Da_'+stt+'.jpg)</p>' : ''}
                                 </div>
                             </div>
 
