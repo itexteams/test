@@ -598,13 +598,13 @@
 
                     customAlert(`Đã xử lý xong! Tìm thấy ${validRows.length-1} dòng dữ liệu.`); // -1 for header estimate
                     btn.disabled = false;
-                    btn.innerText = "⚡ Xử Lý & Tạo Danh Sách";
+                    btn.innerText = "⚡ Tạo câu hỏi";
 
                 } catch (err) {
                     console.error(err);
                     customAlert("Lỗi xử lý file: " + err.message);
                     btn.disabled = false;
-                    btn.innerText = "⚡ Xử Lý & Tạo Danh Sách";
+                    btn.innerText = "⚡ Tạo câu hỏi";
                 }
             };
             reader.readAsArrayBuffer(excelInput.files[0]);
@@ -699,7 +699,7 @@
             if (!isFirebaseConfigured()) {
                 customAlert("Lỗi: Firebase chưa được cấu hình. Vui lòng điền cấu hình Firebase của bạn để sử dụng tính năng Lưu/Tải.", "LỖI CẤU HÌNH");
                 btn.disabled = false;
-                btn.innerText = "💾 Lưu & Lấy Mã Đề";
+                btn.innerText = "💾 Tạo đề";
                 return;
             }
 
@@ -826,7 +826,7 @@
                      console.error(e);
                 }
                 btn.disabled = false;
-                btn.innerText = "💾 Lưu & Lấy Mã Đề";
+                btn.innerText = "💾 Tạo đề";
             }
         }
 
