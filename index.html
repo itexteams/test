@@ -1158,16 +1158,31 @@
                         </div>
                     `;
                 } else if (q.type === 'true_false') {
-    inputHtml = `
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-            ${['a','b','c','d'].map((label, idx) => `
-                <label class="flex flex-col items-center p-3 bg-gray-50 rounded border cursor-pointer hover:bg-gray-100">
-                    <span class="font-bold uppercase mb-1">Ý ${label}</span>
-                    <input type="checkbox" id="tf-${i}-${idx}" class="h-5 w-5 text-green-600">
-                </label>
-            `).join('')}
-        </div>
-    `;
+    uAns = [];
+    let correctCount = 0;
+
+    // 4 checkbox: tf-i-0, tf-i-1, tf-i-2, tf-i-3
+    for (let j = 0; j < 4; j++) {
+        const checked = document.getElementById(`tf-${i}-${j}`).checked;
+
+        // checkbox tick = ĐÚNG, không tick = SAI
+        const val = checked ? 'Đ' : 'S';
+        uAns.push(val);
+
+        // q.answers[j] là đáp án đúng từ Excel, dạng "ĐSĐS"
+        if (val === q.answers[j]) {
+            correctCount++;
+        }
+    }
+
+    // Tính điểm dựa vào số ý đúng
+    if (correctCount === 1) score = scoring.tf_1;
+    if (correctCount === 2) score = scoring.tf_2;
+    if (correctCount === 3) score = scoring.tf_3;
+    if (correctCount === 4) {
+        score = scoring.tf_4;
+        isCorrect = true;
+    }
 }
 
 
