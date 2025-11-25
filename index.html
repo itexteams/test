@@ -10,6 +10,8 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #87F5DB; }
         
@@ -181,6 +183,11 @@
                         <button onclick="loadResults()" class="btn">Xem Kết Quả</button>
                     </div>
                     <div id="results-table-container" class="overflow-x-auto">
+                        <!-- Chart will be rendered here -->
+                        <div class="card p-6 mb-6 hidden" id="results-chart-container">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tổng điểm</h3>
+                            <div style="height: 400px;"><canvas id="scoreChart"></canvas></div>
+                        </div>
                         <!-- Table renders here -->
                         <p class="text-gray-500 text-center italic">Chưa có dữ liệu.</p>
                     </div>
@@ -294,6 +301,7 @@
         let userId = null;
         let currentExamData = null; // For student
         let examTimer = null;
+        let scoreChartInstance = null; // Biến toàn cục cho Chart.js instance
 
         // Max Base64 size allowed for Firestore (approx 1.4MB in Base64 string length, safely below 1MB document limit)
         const MAX_BASE64_SIZE = 1468006; // Corresponds to approx 1.0MB file size when encoded.
@@ -822,6 +830,100 @@
             }
         }
 
+        // Hàm render biểu đồ cột
+        const renderScoreChart = (results, examId) => {
+            const chartContainer = document.getElementById('results-chart-container');
+            const chartCanvas = document.getElementById('scoreChart');
+
+            if (results.length === 0) {
+                chartContainer.classList.add('hidden');
+                return;
+            }
+            
+            // Show chart container
+            chartContainer.classList.remove('hidden');
+
+            // Destroy existing chart instance if it exists
+            if (scoreChartInstance) {
+                scoreChartInstance.destroy();
+            }
+
+            const labels = results.map(r => r.name);
+            const data = results.map(r => r.score);
+            const maxScore = results.length > 0 ? Math.ceil(Math.max(...data)) : 0;
+            const maxPossibleScore = 10; // Giả định thang điểm tối đa là 10
+
+            // Xác định màu sắc thanh cột dựa trên điểm số (xanh cho điểm cao, vàng cho trung bình, đỏ cho thấp)
+            const backgroundColors = data.map(score => {
+                if (score >= maxPossibleScore * 0.8) return '#10b981'; // Tailwind green-600
+                if (score >= maxPossibleScore * 0.5) return '#f59e0b'; // Tailwind yellow-600
+                return '#ef4444'; // Tailwind red-500
+            });
+
+
+            const chartData = {
+                labels: labels,
+                datasets: [{
+                    label: 'Tổng Điểm',
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderColor: backgroundColors,
+                    borderWidth: 1,
+                    borderRadius: 5,
+                }]
+            };
+
+            const config = {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // Cho phép tùy chỉnh kích thước
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: Math.min(10, Math.max(maxScore + 1, maxPossibleScore)), // Max Y-axis là max(score) + 1, nhưng không quá 10
+                            title: {
+                                display: true,
+                                text: 'Điểm số'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Học sinh'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: `Phân phối điểm thi - Mã đề ${examId}`
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 2 }).format(context.parsed.y) + ' điểm';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            scoreChartInstance = new Chart(chartCanvas, config);
+        }
+
         window.loadResults = async () => {
              // Check if Firebase is configured properly
             if (!isFirebaseConfigured()) {
@@ -833,7 +935,14 @@
             if (!examId) return customAlert("Vui lòng nhập mã đề");
 
             const container = document.getElementById('results-table-container');
-            container.innerHTML = '<p class="text-center">Đang tải...</p>';
+            // Xóa nội dung cũ (bảng và chart container)
+            container.innerHTML = `
+                <div class="card p-6 mb-6 hidden" id="results-chart-container">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tổng điểm</h3>
+                    <div style="height: 400px;"><canvas id="scoreChart"></canvas></div>
+                </div>
+                <p class="text-center">Đang tải...</p>
+            `;
 
             try {
                 // Fix Path: itex_results/{examId}
@@ -843,16 +952,29 @@
                 const data = docSnap.data();
                 const results = data.results || [];
 
+                // Xóa message "Đang tải"
+                container.querySelector('p').remove(); 
+
                 if (results.length === 0) {
-                    container.innerHTML = '<p class="text-center italic">Chưa có bài nộp nào.</p>';
+                    container.innerHTML = `
+                        <div class="card p-6 mb-6 hidden" id="results-chart-container">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tổng điểm</h3>
+                            <div style="height: 400px;"><canvas id="scoreChart"></canvas></div>
+                        </div>
+                        <p class="text-center italic">Chưa có bài nộp nào.</p>
+                    `;
                     return;
                 }
 
                 // Sắp xếp theo điểm giảm dần
                 results.sort((a, b) => b.score - a.score);
+                
+                // --- RENDER CHART ---
+                renderScoreChart(results, examId); 
+                // --- END CHART ---
 
-                let html = `
-                    <div class="mb-4 flex justify-between items-center">
+                let htmlTable = `
+                    <div class="mb-4 flex justify-between items-center mt-6">
                         <span class="font-bold text-gray-700">Tổng: ${results.length} bài nộp</span>
                         <button onclick="exportExcel('${examId}')" class="btn bg-green-600 text-sm">📤 Xuất Excel</button>
                     </div>
@@ -870,7 +992,7 @@
                 `;
                 
                 results.forEach(r => {
-                    html += `
+                    htmlTable += `
                         <tr class="hover:bg-gray-50">
                             <td class="py-2 px-4 border-b font-medium">${r.name}</td>
                             <td class="py-2 px-4 border-b">${r.class_}</td>
@@ -881,8 +1003,10 @@
                     `;
                 });
                 
-                html += '</tbody></table>';
-                container.innerHTML = html;
+                htmlTable += '</tbody></table>';
+                
+                // Thêm bảng vào container sau biểu đồ
+                container.insertAdjacentHTML('beforeend', htmlTable);
 
                 // Lưu global để export
                 window.currentResults = results;
