@@ -1296,50 +1296,57 @@
         }
 
         const renderReview = (userAnswers) => {
-            const container = document.getElementById('review-questions');
-            const section = document.getElementById('review-section');
-            section.classList.remove('hidden');
-            container.innerHTML = '';
+    const container = document.getElementById('review-questions');
+    const section = document.getElementById('review-section');
+    section.classList.remove('hidden');
+    container.innerHTML = '';
 
-            userAnswers.forEach((item, i) => {
-                q = item.qData;
-                let ansDisplay = '';
-                let correctDisplay = '';
+    userAnswers.forEach((item, i) => {
+        const q = item.qData;   // ✔ FIX LỖI "q is not defined"
+        let ansDisplay = '';
+        let correctDisplay = '';
 
-                if(q.type === 'mcq') {
-                    ansDisplay = `Bạn chọn: <span class="font-bold">${item.uAns || 'Chưa chọn'}</span>`;
-                    correctDisplay = `Đáp án: ${q.answer}`;
-                } else if(q.type === 'short_answer') {
-                    ansDisplay = `Bạn trả lời: <span class="font-bold">${item.uAns || 'Trống'}</span>`;
-                    correctDisplay = `Đáp án: ${q.answer}`;
-                } else if(q.type === 'true_false') {
-                    ansDisplay = `Bạn chọn: ${item.uAns.map(x => x || '_').join(', ')}`;
-                    correctDisplay = `Đáp án: ${q.answers.join(', ')}`;
-                }
-
-                const div = document.createElement('div');
-                div.className = `p-4 rounded border-l-4 mb-4 ${item.isCorrect ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`;
-                
-                let solHtml = '';
-                if(q.da_img_data) {
-                    solHtml = `<div class="mt-2"><p class="text-xs font-bold text-gray-500">Lời giải:</p><img src="data:image/png;base64,${q.da_img_data}" class="max-h-40 border rounded mt-1"></div>`;
-                }
-
-                div.innerHTML = `
-                    <div class="flex justify-between">
-                        <span class="font-bold text-gray-700">Câu ${i+1} (${q.type})</span>
-                        <span class="font-bold ${item.score > 0 ? 'text-green-600' : 'text-red-600'}">+${item.score.toFixed(2)} đ</span>
-                    </div>
-                    <img src="data:image/png;base64,${q.img_data}" class="max-h-32 object-contain my-2">
-                    <div class="text-sm">
-                        <p class="${item.isCorrect ? 'text-green-700' : 'text-red-700'}">${ansDisplay}</p>
-                        <p class="text-gray-600 font-semibold">${correctDisplay}</p>
-                    </div>
-                    ${solHtml}
-                `;
-                container.appendChild(div);
-            });
+        if(q.type === 'mcq') {
+            ansDisplay = `Bạn chọn: <span class="font-bold">${item.uAns || 'Chưa chọn'}</span>`;
+            correctDisplay = `Đáp án: ${q.answer}`;
+        } 
+        else if(q.type === 'short_answer') {
+            ansDisplay = `Bạn trả lời: <span class="font-bold">${item.uAns || 'Trống'}</span>`;
+            correctDisplay = `Đáp án: ${q.answer}`;
+        } 
+        else if(q.type === 'true_false') {
+            ansDisplay = `Bạn chọn: ${item.uAns.map(x => x || '_').join(', ')}`;
+            correctDisplay = `Đáp án: ${q.answers.join(', ')}`;
         }
+
+        const div = document.createElement('div');
+        div.className = `p-4 rounded border-l-4 mb-4 ${item.isCorrect ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`;
+
+        let solHtml = '';
+        if(q.da_img_data) {
+            solHtml = `
+                <div class="mt-2">
+                    <p class="text-xs font-bold text-gray-500">Lời giải:</p>
+                    <img src="data:image/png;base64,${q.da_img_data}" class="max-h-40 border rounded mt-1">
+                </div>`;
+        }
+
+        div.innerHTML = `
+            <div class="flex justify-between">
+                <span class="font-bold text-gray-700">Câu ${i+1} (${q.type})</span>
+                <span class="font-bold ${item.score > 0 ? 'text-green-600' : 'text-red-600'}">+${item.score.toFixed(2)} đ</span>
+            </div>
+            <img src="data:image/png;base64,${q.img_data}" class="max-h-32 object-contain my-2">
+            <div class="text-sm">
+                <p class="${item.isCorrect ? 'text-green-700' : 'text-red-700'}">${ansDisplay}</p>
+                <p class="text-gray-600 font-semibold">${correctDisplay}</p>
+            </div>
+            ${solHtml}
+        `;
+        container.appendChild(div);
+    });
+};
+
     </script>
 </body>
 </html>
