@@ -171,7 +171,7 @@
 
                     <div class="flex flex-wrap gap-4 border-t pt-6">
                         <button onclick="addQuestion()" class="btn bg-green-500 hover:bg-green-600">+ Thêm Thủ Công</button>
-                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Tạo Đề</button>
+                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Đạo Đề</button>
                     </div>
                 </div>
 
@@ -1158,32 +1158,31 @@
                         </div>
                     `;
                 } else if (q.type === 'true_false') {
-    uAns = [];
+    uAns = [];          // Lưu 4 lựa chọn tương ứng Đ hoặc S
     let correctCount = 0;
 
-    // 4 checkbox: tf-i-0, tf-i-1, tf-i-2, tf-i-3
     for (let j = 0; j < 4; j++) {
         const checked = document.getElementById(`tf-${i}-${j}`).checked;
 
-        // checkbox tick = ĐÚNG, không tick = SAI
-        const val = checked ? 'Đ' : 'S';
+        const val = checked ? 'Đ' : 'S';   // Tick = ĐÚNG, không tick = SAI
         uAns.push(val);
 
-        // q.answers[j] là đáp án đúng từ Excel, dạng "ĐSĐS"
+        // q.answers[j] là đáp án đúng (dạng "ĐSĐS")
         if (val === q.answers[j]) {
             correctCount++;
         }
     }
 
-    // Tính điểm dựa vào số ý đúng
+    // Tính điểm theo số ý đúng
     if (correctCount === 1) score = scoring.tf_1;
     if (correctCount === 2) score = scoring.tf_2;
     if (correctCount === 3) score = scoring.tf_3;
     if (correctCount === 4) {
         score = scoring.tf_4;
-        isCorrect = true;
+        isCorrect = true;  // đủ 4 ý đúng thì coi là đúng trọn vẹn
     }
 }
+
 
 
                 const div = document.createElement('div');
