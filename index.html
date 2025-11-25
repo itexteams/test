@@ -72,11 +72,7 @@
         <!-- Header -->
         <div class="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-md">
             <div class="flex items-center space-x-3">
-                <!-- ĐÃ CHÈN LOGO: Sử dụng đường dẫn tương đối đến file logo.png -->
-                <img id="app-logo"
-                     src="/logo.png" 
-                     alt="Logo Hệ Thống iTeX"
-                     class="w-10 h-10 rounded-full object-cover">
+                <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xl">iTeX</div>
                 <h1 class="text-xl font-bold text-gray-800">Hệ Thống Kiểm Tra Online</h1>
             </div>
             <div id="user-info" class="text-sm text-gray-500">Đang tải...</div>
@@ -743,7 +739,7 @@
                     }
 
                     if (!imgBase64) {
-                          throw new Error(`Câu ${i+1} chưa chọn ảnh đề bài!`);
+                         throw new Error(`Câu ${i+1} chưa chọn ảnh đề bài!`);
                     }
 
                     // --- NEW SIZE CHECK (Prevent 1MB limit error) ---
@@ -827,7 +823,7 @@
             } catch (e) {
                 customAlert(e.message, "Lỗi Lưu Đề Thi");
                 if (!e.message.startsWith("Vui lòng") && !e.message.startsWith("Đề thi") && !e.message.startsWith("Câu") && !e.message.startsWith("Kích thước")) {
-                    console.error(e);
+                     console.error(e);
                 }
                 btn.disabled = false;
                 btn.innerText = "💾 Lưu & Lấy Mã Đề";
@@ -859,6 +855,7 @@
 
             // Thay đổi màu cột thành #04CCCC
             const backgroundColor = '#04CCCC'; 
+
 
             const chartData = {
                 labels: labels,
@@ -1039,7 +1036,7 @@
         // --- STUDENT LOGIC ---
 
         window.checkExam = async () => {
-             // Check if Firebase is configured properly
+            // Check if Firebase is configured properly
             if (!isFirebaseConfigured()) {
                 customAlert("Lỗi: Firebase chưa được cấu hình. Vui lòng điền cấu hình Firebase của bạn để sử dụng tính năng Lưu/Tải.", "LỖI CẤU HÌNH");
                 return;
