@@ -73,7 +73,7 @@
         <div class="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-md">
             <div class="flex items-center space-x-3">
                 <!-- Placeholder Logo -->
-                <img src="logo.png" class="h-10 w-10 object-contain" alt="Logo">
+                <div class="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center text-xs font-bold text-gray-500">LOGO</div>
                 <h1 class="text-xl font-bold text-gray-800">Hệ Thống Kiểm Tra Online</h1>
             </div>
             <div id="user-info" class="text-sm text-gray-500">Đang tải...</div>
@@ -180,7 +180,7 @@
 
                     <div class="flex flex-wrap gap-4 border-t pt-6">
                         <button onclick="addQuestion()" class="btn bg-green-500 hover:bg-green-600">+ Thêm Thủ Công</button>
-                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Tạo Đề</button>
+                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Đạo Đề</button>
                     </div>
                 </div>
 
@@ -229,8 +229,11 @@
                 <!-- Taking Exam (Hidden initially) -->
                 <div id="taking-exam" class="hidden">
                     <!-- Timer Sticky Header -->
-                    <div class="sticky top-4 z-50 bg-white p-4 rounded-xl shadow-lg border-2 border-primary mb-6 flex justify-between items-center">
-                        <span class="font-bold text-gray-700">Thí sinh: <span id="display-s-name"></span></span>
+                    <div class="sticky top-4 z-50 bg-white p-4 rounded-xl shadow-lg border-2 border-primary mb-6 flex flex-wrap justify-between items-center gap-2">
+                        <div class="flex flex-col">
+                            <span class="font-bold text-gray-700">Thí sinh: <span id="display-s-name"></span></span>
+                            <span class="text-xs text-red-600 font-bold mt-1" id="violation-display">Cảnh báo vi phạm: 0</span>
+                        </div>
                         <div id="timer" class="text-2xl font-mono font-bold text-red-600">00:00</div>
                     </div>
 
@@ -329,6 +332,7 @@
         let currentExamData = null; // For student
         let examTimer = null;
         let scoreChartInstance = null; // Biến toàn cục cho Chart.js instance
+        let violationCount = 0; // Đếm số lần vi phạm chuyển tab
 
         // Max Base64 size allowed for Firestore (approx 1.4MB in Base64 string length, safely below 1MB document limit)
         const MAX_BASE64_SIZE = 1468006; // Corresponds to approx 1.0MB file size when encoded.
@@ -431,6 +435,44 @@
                 document.getElementById('admin-key-input').focus();
             }
         }
+
+        // --- FULLSCREEN & ANTI-CHEAT FUNCTIONS (NEW) ---
+        const enterFullscreen = () => {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else if (elem.webkitRequestFullscreen) { /* Safari */
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { /* IE11 */
+                elem.msRequestFullscreen();
+            }
+        }
+
+        const exitFullscreen = () => {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) { /* IE11 */
+                document.msExitFullscreen();
+            }
+        }
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`
+                    <h3 class="text-red-600 font-bold text-xl mb-2">⚠️ CẢNH BÁO VI PHẠM</h3>
+                    <p>Hệ thống phát hiện bạn đã rời khỏi màn hình làm bài thi.</p>
+                    <p class="font-bold mt-2">Số lần vi phạm: ${violationCount}</p>
+                    <p class="text-sm mt-2 text-gray-500">Hành động này đã được ghi lại và sẽ báo cáo cho giám thị.</p>
+                `, "CẢNH BÁO GIAN LẬN");
+            }
+        }
+
 
         // --- TEACHER LOGIC ---
 
@@ -1178,6 +1220,14 @@
                 document.getElementById('taking-exam').classList.remove('hidden');
                 document.getElementById('display-s-name').innerText = name;
 
+                // --- ANTI-CHEAT & FULLSCREEN TRIGGER ---
+                violationCount = 0;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: 0`;
+                enterFullscreen(); // Request Fullscreen
+                // Add Anti-cheat listener
+                document.addEventListener("visibilitychange", handleVisibilityChange);
+                // -------------------------------------
+
                 renderStudentQuestions();
                 startTimer(currentExamData.time);
 
@@ -1278,6 +1328,11 @@
             clearInterval(examTimer);
             document.getElementById('btn-submit').disabled = true;
             document.getElementById('btn-submit').innerText = "Đang chấm điểm...";
+
+            // --- CLEANUP ANTI-CHEAT ---
+            exitFullscreen(); // Exit Fullscreen
+            document.removeEventListener("visibilitychange", handleVisibilityChange); // Remove listener
+            // --------------------------
 
             const questions = currentExamData.shuffledQuestions;
             const scoring = currentExamData.scoring;
