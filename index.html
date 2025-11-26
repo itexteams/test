@@ -1226,7 +1226,6 @@
                     uAns = [];
                     let correctCount = 0;
                     for(let j=0; j<4; j++) {
-                        // Lấy giá trị radio button được chọn
                         const radios = document.getElementsByName(`tf-${i}-${j}`);
                         let val = null;
                         for(let r of radios) if(r.checked) val = r.value;
@@ -1286,7 +1285,7 @@
     container.innerHTML = '';
 
     userAnswers.forEach((item, i) => {
-        const q = item.qData;   // ✔ FIX LỖI "q is not defined"
+        const q = item.qData;   
         let ansDisplay = '';
         let correctDisplay = '';
 
@@ -1306,7 +1305,7 @@
         }
 
         const div = document.createElement('div');
-        div.className = `p-4 rounded border-l-4 mb-4 ${item.isCorrect ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`;
+        div.className = `p-4 rounded border-l-4 mb-4 ${item.score > 0 ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`;
 
         let solHtml = '';
         if(q.da_img_data) {
