@@ -73,7 +73,7 @@
         <div class="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-md">
             <div class="flex items-center space-x-3">
                 <!-- Placeholder Logo -->
-                <img src="logo.png" class="h-10 w-10 object-contain" alt="Logo">
+                <div class="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center text-xs font-bold text-gray-500">LOGO</div>
                 <h1 class="text-xl font-bold text-gray-800">Hệ Thống Kiểm Tra Online</h1>
             </div>
             <div id="user-info" class="text-sm text-gray-500">Đang tải...</div>
@@ -172,7 +172,7 @@
 
                     <div class="flex flex-wrap gap-4 border-t pt-6">
                         <button onclick="addQuestion()" class="btn bg-green-500 hover:bg-green-600">+ Thêm Thủ Công</button>
-                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Tạo Đề</button>
+                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Đạo Đề</button>
                     </div>
                 </div>
 
@@ -260,6 +260,19 @@
             <h3 id="modal-title" class="text-lg font-bold text-gray-800 mb-3">Thông Báo</h3>
             <p id="modal-message" class="text-gray-600 mb-6"></p>
             <button id="modal-close-btn" onclick="document.getElementById('custom-alert-modal').classList.add('hidden')" class="btn bg-gray-500 hover:bg-gray-600">Đóng</button>
+        </div>
+    </div>
+
+    <!-- Password Modal (NEW) -->
+    <div id="password-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-[9999]">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">🔐 Yêu cầu Quyền Truy Cập</h3>
+            <p class="text-sm text-gray-600 mb-4">Vui lòng nhập mã khóa để vào trang Giáo viên.</p>
+            <input type="password" id="admin-key-input" class="input-field mb-6 text-center text-lg" placeholder="Nhập mã khóa...">
+            <div class="flex gap-2 justify-center">
+                <button onclick="document.getElementById('password-modal').classList.add('hidden')" class="btn bg-gray-500 hover:bg-gray-600">Hủy</button>
+                <button onclick="checkAdminKey()" class="btn bg-primary hover:bg-primary-hover">Xác nhận</button>
+            </div>
         </div>
     </div>
 
@@ -372,12 +385,37 @@
 
 
         // --- GLOBAL FUNCTIONS ---
+        // Đã cập nhật: Logic chọn Role có bảo mật
         window.setRole = (role) => {
-            document.getElementById('role-selection').classList.add('hidden');
             if(role === 'teacher') {
+                // Hiển thị modal nhập mật khẩu
+                document.getElementById('password-modal').classList.remove('hidden');
+                const input = document.getElementById('admin-key-input');
+                input.value = '';
+                input.focus();
+                
+                // Thêm sự kiện nhấn Enter
+                input.onkeydown = (e) => {
+                    if (e.key === 'Enter') checkAdminKey();
+                };
+            } else {
+                // Vào thẳng trang học sinh
+                document.getElementById('role-selection').classList.add('hidden');
+                document.getElementById('student-view').classList.remove('hidden');
+            }
+        }
+
+        // Logic kiểm tra Key Admin (MỚI)
+        window.checkAdminKey = () => {
+            const key = document.getElementById('admin-key-input').value.trim();
+            if (key === 'admin') {
+                document.getElementById('password-modal').classList.add('hidden');
+                document.getElementById('role-selection').classList.add('hidden');
                 document.getElementById('teacher-view').classList.remove('hidden');
             } else {
-                document.getElementById('student-view').classList.remove('hidden');
+                customAlert("Mã truy cập không chính xác. Vui lòng nhập lại!", "⛔ LỖI TRUY CẬP");
+                document.getElementById('admin-key-input').value = '';
+                document.getElementById('admin-key-input').focus();
             }
         }
 
