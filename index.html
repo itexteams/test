@@ -1162,21 +1162,18 @@
                     inputHtml = `
                         <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                             ${['a','b','c','d'].map((label, j) => `
-                                <div class="flex items-center justify-between border p-3 rounded bg-gray-50">
+                                <div class="flex items-center justify-between border p-3 rounded bg-gray-50 hover:bg-gray-100 cursor-pointer" onclick="document.getElementById('tf-${i}-${j}').click()">
                                     <span class="font-bold text-sm uppercase">Ý ${label}</span>
-                                    <div class="space-x-4">
-                                        <label class="inline-flex items-center">
-                                            <input type="radio" name="tf-${i}-${j}" value="Đ" class="form-radio text-green-600">
-                                            <span class="ml-1">Đúng</span>
-                                        </label>
-                                        <label class="inline-flex items-center">
-                                            <input type="radio" name="tf-${i}-${j}" value="S" class="form-radio text-red-600">
-                                            <span class="ml-1">Sai</span>
+                                    <div class="flex items-center">
+                                        <label class="inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-5 h-5 text-primary rounded border-gray-300 focus:ring-primary" onclick="event.stopPropagation()">
+                                            <span class="ml-2 text-gray-700">Đúng</span>
                                         </label>
                                     </div>
                                 </div>
                             `).join('')}
                         </div>
+                        <p class="text-xs text-gray-500 mt-2 italic">* Tick chọn nếu nhận định là ĐÚNG, bỏ trống nếu là SAI.</p>
                     `;
                 }
 
@@ -1253,10 +1250,12 @@
                     uAns = [];
                     let correctCount = 0;
                     for(let j=0; j<4; j++) {
-                        const radios = document.getElementsByName(`tf-${i}-${j}`);
-                        let val = null;
-                        for(let r of radios) if(r.checked) val = r.value;
-                        uAns.push(val); // 'Đ', 'S', or null
+                        const checkbox = document.getElementById(`tf-${i}-${j}`);
+                        // Nếu checked -> 'Đ', không checked -> 'S'
+                        const val = checkbox.checked ? 'Đ' : 'S';
+                        uAns.push(val);
+                        
+                        // So sánh với đáp án (q.answers[j] là 'Đ' hoặc 'S')
                         if (val === q.answers[j]) correctCount++;
                     }
                     if(correctCount === 1) score = scoring.tf_1;
