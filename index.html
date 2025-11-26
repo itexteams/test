@@ -1085,6 +1085,7 @@
                                 <th class="py-2 px-4 border-b text-left">Lớp</th>
                                 <th class="py-2 px-4 border-b text-left">Trường</th>
                                 <th class="py-2 px-4 border-b text-center font-bold text-primary">Điểm</th>
+                                <th class="py-2 px-4 border-b text-center text-red-500">Vi phạm</th>
                                 <th class="py-2 px-4 border-b text-right">Thời gian nộp</th>
                             </tr>
                         </thead>
@@ -1098,6 +1099,7 @@
                             <td class="py-2 px-4 border-b">${r.class_}</td>
                             <td class="py-2 px-4 border-b">${r.school}</td>
                             <td class="py-2 px-4 border-b text-center font-bold text-lg">${r.score.toFixed(2)}</td>
+                            <td class="py-2 px-4 border-b text-center text-red-500 font-bold">${r.violation_count || 0}</td>
                             <td class="py-2 px-4 border-b text-right text-sm text-gray-500">${new Date(r.submittedAt).toLocaleString()}</td>
                         </tr>
                     `;
@@ -1123,6 +1125,7 @@
                 "Trường": r.school,
                 "Lớp": r.class_,
                 "Điểm": r.score,
+                "Số lần vi phạm": r.violation_count || 0,
                 "Thời gian nộp": new Date(r.submittedAt).toLocaleString()
             })));
             const wb = XLSX.utils.book_new();
@@ -1388,6 +1391,7 @@
                 school: sSchool,
                 class_: sClass,
                 score: totalScore,
+                violation_count: violationCount, // Updated: Lưu số lần vi phạm
                 submittedAt: new Date().toISOString()
             };
 
