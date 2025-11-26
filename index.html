@@ -73,7 +73,7 @@
         <div class="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-md">
             <div class="flex items-center space-x-3">
                 <!-- Placeholder Logo -->
-                <div class="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center text-xs font-bold text-gray-500">LOGO</div>
+                <img src="logo.png" class="h-10 w-10 object-contain" alt="Logo">
                 <h1 class="text-xl font-bold text-gray-800">Hệ Thống Kiểm Tra Online</h1>
             </div>
             <div id="user-info" class="text-sm text-gray-500">Đang tải...</div>
@@ -119,9 +119,17 @@
                         </div>
                     </div>
                     
-                    <div class="flex items-center mb-6">
-                        <input type="checkbox" id="t-review" class="w-5 h-5 text-primary border-gray-300 rounded" checked>
-                        <label for="t-review" class="ml-2 text-gray-700 font-medium">Cho phép học sinh xem đáp án & lời giải sau khi nộp</label>
+                    <!-- Config Options -->
+                    <div class="space-y-3 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h3 class="font-bold text-gray-800 mb-2 text-sm">Cấu hình Hiển thị:</h3>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="t-review" class="w-5 h-5 text-primary border-gray-300 rounded" checked>
+                            <label for="t-review" class="ml-2 text-gray-700 font-medium">Cho phép học sinh xem đáp án & lời giải sau khi nộp</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="t-show-score" class="w-5 h-5 text-primary border-gray-300 rounded" checked>
+                            <label for="t-show-score" class="ml-2 text-gray-700 font-medium">Cho phép học sinh xem điểm số sau khi nộp</label>
+                        </div>
                     </div>
 
                     <!-- Scoring Config -->
@@ -172,7 +180,7 @@
 
                     <div class="flex flex-wrap gap-4 border-t pt-6">
                         <button onclick="addQuestion()" class="btn bg-green-500 hover:bg-green-600">+ Thêm Thủ Công</button>
-                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Đạo Đề</button>
+                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Tạo Đề</button>
                     </div>
                 </div>
 
@@ -238,9 +246,14 @@
                     <h2 class="text-3xl font-bold text-primary mb-2">🎉 Hoàn Thành!</h2>
                     <p class="text-gray-600 mb-6">Bạn đã nộp bài thành công.</p>
                     
-                    <div class="bg-yellow-50 p-6 rounded-xl border-2 border-yellow-400 inline-block mb-8">
+                    <div id="score-display-box" class="bg-yellow-50 p-6 rounded-xl border-2 border-yellow-400 inline-block mb-8">
                         <p class="text-sm text-gray-500 uppercase font-semibold">Tổng Điểm</p>
                         <p id="final-score" class="text-6xl font-extrabold text-gray-800 mt-2">0.00</p>
+                    </div>
+
+                    <div id="score-hidden-msg" class="hidden mb-8 p-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-200">
+                        <p class="font-semibold">✅ Bài làm đã được ghi nhận.</p>
+                        <p class="text-sm">Điểm số sẽ được giáo viên công bố sau.</p>
                     </div>
 
                     <div id="review-section" class="hidden text-left space-y-6 border-t pt-6">
@@ -747,6 +760,8 @@
                 const tName = tNameInput.value.trim();
                 const tTime = document.getElementById('t-time').value;
                 const tReview = document.getElementById('t-review').checked;
+                // Add: Get view score config
+                const tShowScore = document.getElementById('t-show-score').checked;
                 const questionsDivs = document.getElementById('questions-list').children;
                 
                 // --- VALIDATION WITH UI FEEDBACK ---
@@ -825,6 +840,7 @@
                     teacher: tName,
                     time: parseInt(tTime),
                     allow_review: tReview,
+                    view_score: tShowScore, // Add metadata
                     scoring,
                     question_count: questions.length, // Store count
                     created_at: new Date().toISOString()
@@ -1329,8 +1345,21 @@
                 // Show UI
                 document.getElementById('taking-exam').classList.add('hidden');
                 document.getElementById('student-result').classList.remove('hidden');
-                document.getElementById('final-score').innerText = totalScore.toFixed(2);
-
+                
+                // --- Logic Hiển thị Điểm ---
+                // Kiểm tra xem giáo viên có cho xem điểm không (mặc định true nếu không có field để tương thích ngược)
+                const canViewScore = currentExamData.view_score !== false; 
+                
+                if (canViewScore) {
+                    document.getElementById('score-display-box').classList.remove('hidden');
+                    document.getElementById('score-hidden-msg').classList.add('hidden');
+                    document.getElementById('final-score').innerText = totalScore.toFixed(2);
+                } else {
+                    document.getElementById('score-display-box').classList.add('hidden');
+                    document.getElementById('score-hidden-msg').classList.remove('hidden');
+                }
+                
+                // Logic Xem lại bài
                 if (currentExamData.allow_review) {
                     renderReview(userAnswers);
                 }
@@ -1346,6 +1375,9 @@
             const section = document.getElementById('review-section');
             section.classList.remove('hidden');
             container.innerHTML = '';
+            
+            // Check permission again to control point display in review
+            const canViewScore = currentExamData.view_score !== false; 
 
             userAnswers.forEach((item, i) => {
                 const q = item.qData;   // ✔ FIX LỖI "q is not defined"
@@ -1376,11 +1408,17 @@
                             <img src="data:image/png;base64,${q.da_img_data}" class="max-h-40 border rounded mt-1">
                         </div>`;
                 }
+                
+                // Logic hiển thị điểm ở góc phải mỗi câu
+                // Nếu view_score = false, chỉ hiện Đúng/Sai thay vì điểm số cụ thể
+                const scoreDisplay = canViewScore 
+                    ? `<span class="font-bold ${item.score > 0 ? 'text-green-600' : 'text-red-600'}">+${item.score.toFixed(2)} đ</span>`
+                    : `<span class="font-bold ${item.isCorrect ? 'text-green-600' : 'text-red-600'}">${item.isCorrect ? 'Đúng' : 'Sai'}</span>`;
 
                 div.innerHTML = `
                     <div class="flex justify-between">
                         <span class="font-bold text-gray-700">Câu ${i+1} (${q.type})</span>
-                        <span class="font-bold ${item.score > 0 ? 'text-green-600' : 'text-red-600'}">+${item.score.toFixed(2)} đ</span>
+                        ${scoreDisplay}
                     </div>
                     <img src="data:image/png;base64,${q.img_data}" class="max-h-32 object-contain my-2">
                     <div class="text-sm">
