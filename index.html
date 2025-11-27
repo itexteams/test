@@ -73,7 +73,7 @@
         <div class="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-md">
             <div class="flex items-center space-x-3">
                 <!-- Placeholder Logo -->
-                <img src="logo.png" class="h-10 w-10 object-contain" alt="Logo">
+                <div class="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center text-xs font-bold text-gray-500">LOGO</div>
                 <h1 class="text-xl font-bold text-gray-800">Hệ Thống Kiểm Tra Online</h1>
             </div>
             <div id="user-info" class="text-sm text-gray-500">Đang tải...</div>
@@ -180,7 +180,7 @@
 
                     <div class="flex flex-wrap gap-4 border-t pt-6">
                         <button onclick="addQuestion()" class="btn bg-green-500 hover:bg-green-600">+ Thêm Thủ Công</button>
-                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Tạo Đề</button>
+                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Đạo Đề</button>
                     </div>
                 </div>
 
@@ -192,11 +192,19 @@
                         <button onclick="loadResults()" class="btn">Xem Kết Quả</button>
                     </div>
                     <div id="results-table-container" class="overflow-x-auto">
-                        <!-- Chart will be rendered here -->
+                        <!-- Chart 1: Scores -->
                         <div class="card p-6 mb-6 hidden" id="results-chart-container">
                             <h3 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tổng điểm</h3>
                             <div style="height: 400px;"><canvas id="scoreChart"></canvas></div>
                         </div>
+
+                        <!-- Chart 2: Question Analysis (NEW) -->
+                        <div class="card p-6 mb-6 hidden" id="question-chart-container">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tỉ lệ Làm đúng theo Câu hỏi</h3>
+                            <p class="text-sm text-gray-500 mb-2 italic">Di chuột vào cột để xem danh sách học sinh làm đúng.</p>
+                            <div style="height: 400px;"><canvas id="questionChart"></canvas></div>
+                        </div>
+
                         <!-- Table renders here -->
                         <p class="text-gray-500 text-center italic">Chưa có dữ liệu.</p>
                     </div>
@@ -331,7 +339,8 @@
         let userId = null;
         let currentExamData = null; // For student
         let examTimer = null;
-        let scoreChartInstance = null; // Biến toàn cục cho Chart.js instance
+        let scoreChartInstance = null; // Biến toàn cục cho Chart điểm số
+        let questionChartInstance = null; // Biến toàn cục cho Chart câu hỏi (NEW)
         let violationCount = 0; // Đếm số lần vi phạm chuyển tab
 
         // Max Base64 size allowed for Firestore (approx 1.4MB in Base64 string length, safely below 1MB document limit)
@@ -1024,6 +1033,105 @@
             scoreChartInstance = new Chart(chartCanvas, config);
         }
 
+        // --- NEW: Render Question Analysis Chart ---
+        const renderQuestionAnalysisChart = (results, examId) => {
+            const chartContainer = document.getElementById('question-chart-container');
+            const chartCanvas = document.getElementById('questionChart');
+
+            // 1. Kiểm tra xem có dữ liệu chi tiết không (biến 'details' trong results)
+            const hasDetails = results.some(r => r.details && Array.isArray(r.details));
+            
+            if (!hasDetails) {
+                chartContainer.classList.add('hidden');
+                return;
+            }
+
+            chartContainer.classList.remove('hidden');
+
+            if (questionChartInstance) {
+                questionChartInstance.destroy();
+            }
+
+            // 2. Tính toán thống kê
+            // Giả định số câu hỏi là độ dài mảng details của bài nộp đầu tiên có data
+            const sample = results.find(r => r.details);
+            const questionCount = sample.details.length;
+            
+            // Stats array: Mỗi phần tử là object { count: số người đúng, students: [tên người đúng] }
+            const stats = Array.from({length: questionCount}, () => ({ count: 0, students: [] }));
+
+            results.forEach(r => {
+                if (r.details) {
+                    r.details.forEach((isCorrect, idx) => {
+                        if (isCorrect) {
+                            stats[idx].count++;
+                            stats[idx].students.push(r.name);
+                        }
+                    });
+                }
+            });
+
+            // 3. Cấu hình Chart.js
+            const labels = stats.map((_, i) => `Câu ${i + 1}`);
+            const data = stats.map(s => s.count);
+
+            const config = {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Số học sinh làm đúng',
+                        data: data,
+                        backgroundColor: '#FF9F43', // Màu cam
+                        borderColor: '#FF9F43',
+                        borderWidth: 1,
+                        borderRadius: 5,
+                        // Thêm dữ liệu sinh viên vào dataset để dùng trong tooltip
+                        studentsData: stats.map(s => s.students)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 },
+                            title: { display: true, text: 'Số lượng học sinh' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                // Custom Tooltip để hiện danh sách tên
+                                afterBody: function(context) {
+                                    const dataIndex = context[0].dataIndex;
+                                    const dataset = context[0].dataset;
+                                    const studentList = dataset.studentsData[dataIndex];
+                                    
+                                    if (!studentList || studentList.length === 0) return [];
+                                    
+                                    // Giới hạn hiển thị nếu quá dài
+                                    const displayList = studentList.slice(0, 10);
+                                    const remaining = studentList.length - 10;
+                                    
+                                    const lines = ['Danh sách làm đúng:'];
+                                    displayList.forEach(name => lines.push(`• ${name}`));
+                                    if (remaining > 0) lines.push(`... và ${remaining} em khác`);
+                                    
+                                    return lines;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            questionChartInstance = new Chart(chartCanvas, config);
+        }
+
+
         window.loadResults = async () => {
              // Check if Firebase is configured properly
             if (!isFirebaseConfigured()) {
@@ -1036,13 +1144,14 @@
 
             const container = document.getElementById('results-table-container');
             // Xóa nội dung cũ (bảng và chart container)
-            container.innerHTML = `
-                <div class="card p-6 mb-6 hidden" id="results-chart-container">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tổng điểm</h3>
-                    <div style="height: 400px;"><canvas id="scoreChart"></canvas></div>
-                </div>
-                <p class="text-center">Đang tải...</p>
-            `;
+            // Giữ lại cấu trúc HTML chart ẩn
+            const tableContainer = document.querySelector('#results-table-container table');
+            if(tableContainer) tableContainer.remove();
+            
+            const loadingP = document.createElement('p');
+            loadingP.className = 'text-center mt-4';
+            loadingP.innerText = 'Đang tải...';
+            container.appendChild(loadingP);
 
             try {
                 // Fix Path: itex_results/{examId}
@@ -1053,25 +1162,27 @@
                 const results = data.results || [];
 
                 // Xóa message "Đang tải"
-                container.querySelector('p').remove(); 
+                loadingP.remove();
 
                 if (results.length === 0) {
-                    container.innerHTML = `
-                        <div class="card p-6 mb-6 hidden" id="results-chart-container">
-                            <h3 class="text-xl font-bold text-gray-800 mb-4">Phân tích Tổng điểm</h3>
-                            <div style="height: 400px;"><canvas id="scoreChart"></canvas></div>
-                        </div>
-                        <p class="text-center italic">Chưa có bài nộp nào.</p>
-                    `;
+                     // Ẩn charts
+                    document.getElementById('results-chart-container').classList.add('hidden');
+                    document.getElementById('question-chart-container').classList.add('hidden');
+                    
+                    const p = document.createElement('p');
+                    p.className = 'text-center italic';
+                    p.innerText = 'Chưa có bài nộp nào.';
+                    container.appendChild(p);
                     return;
                 }
 
                 // Sắp xếp theo điểm giảm dần
                 results.sort((a, b) => b.score - a.score);
                 
-                // --- RENDER CHART ---
+                // --- RENDER CHARTS ---
                 renderScoreChart(results, examId); 
-                // --- END CHART ---
+                renderQuestionAnalysisChart(results, examId); // Call new chart function
+                // --- END CHARTS ---
 
                 let htmlTable = `
                     <div class="mb-4 flex justify-between items-center mt-6">
@@ -1114,7 +1225,11 @@
                 window.currentResults = results;
 
             } catch (e) {
-                container.innerHTML = `<p class="text-red-500 text-center">Lỗi: ${e.message}</p>`;
+                loadingP.remove();
+                const errP = document.createElement('p');
+                errP.className = 'text-red-500 text-center';
+                errP.innerText = `Lỗi: ${e.message}`;
+                container.appendChild(errP);
             }
         }
 
@@ -1341,6 +1456,11 @@
             const scoring = currentExamData.scoring;
             let totalScore = 0;
             let userAnswers = []; // To save detailed answer for review
+            
+            // --- NEW: Detailed Result for Analytics ---
+            // Create an array to map original Question Index to correctness
+            const detailedResult = new Array(questions.length).fill(false); 
+            // ------------------------------------------
 
             questions.forEach((q, i) => {
                 let score = 0;
@@ -1379,6 +1499,11 @@
 
                 totalScore += score;
                 userAnswers.push({ qIdx: i, type: q.type, uAns, score, isCorrect, qData: q });
+                
+                // Map back to original index for analysis
+                if (typeof q.originalIdx !== 'undefined') {
+                    detailedResult[q.originalIdx] = isCorrect;
+                }
             });
 
             // Save Result
@@ -1391,7 +1516,8 @@
                 school: sSchool,
                 class_: sClass,
                 score: totalScore,
-                violation_count: violationCount, // Updated: Lưu số lần vi phạm
+                violation_count: violationCount, 
+                details: detailedResult, // Save detailed correctness
                 submittedAt: new Date().toISOString()
             };
 
