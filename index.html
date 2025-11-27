@@ -1131,6 +1131,78 @@
             questionChartInstance = new Chart(chartCanvas, config);
         }
 
+        // --- NEW: Helper to render Detailed Scores Table ---
+        const renderDetailedScoresTable = (results) => {
+            const container = document.getElementById('results-table-container');
+            const sample = results.find(r => r.detailed_scores && Array.isArray(r.detailed_scores));
+            
+            if (!sample) return; 
+
+            const questionCount = sample.detailed_scores.length;
+            const tableWrapper = document.createElement('div');
+            tableWrapper.className = 'mt-8 overflow-x-auto bg-white rounded-lg shadow border border-gray-200';
+            
+            let html = `
+                <div class="p-4 border-b bg-gray-50">
+                    <h3 class="text-xl font-bold text-gray-800">Chi tiết điểm từng câu</h3>
+                </div>
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-100 text-gray-700">
+                        <tr>
+                            <th class="py-3 px-4 text-left font-bold sticky left-0 bg-gray-100 z-10 shadow-sm border-b">Học sinh</th>
+                            <th class="py-3 px-4 text-center font-bold text-primary border-b">Tổng điểm</th>
+            `;
+            
+            for(let i=0; i<questionCount; i++) {
+                html += `<th class="py-3 px-2 text-center font-semibold border-b min-w-[60px]">Câu ${i+1}</th>`;
+            }
+            
+            html += `</tr></thead><tbody>`;
+            
+            results.forEach((r, idx) => {
+                if (!r.detailed_scores) return; 
+                
+                const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                
+                html += `<tr class="${bgClass} hover:bg-gray-100 transition-colors">
+                    <td class="py-3 px-4 font-medium text-gray-800 sticky left-0 ${bgClass} z-10 shadow-sm border-b">${r.name}</td>
+                    <td class="py-3 px-4 text-center font-bold text-xl text-primary border-b">${r.score.toFixed(2)}</td>
+                `;
+                
+                for(let i=0; i<questionCount; i++) {
+                    const ds = r.detailed_scores[i];
+                    let circleColor = '#FA6D62'; // Mặc định Đỏ (0 điểm)
+                    let scoreText = '-';
+
+                    if (ds) {
+                        scoreText = parseFloat(ds.score.toFixed(2));
+                        if (ds.score === ds.max) circleColor = '#5EFC93'; // Xanh (Max điểm)
+                        else if (ds.score > 0) circleColor = '#EAF862';   // Vàng (>0)
+                        
+                        html += `
+                            <td class="py-3 px-2 text-center border-b">
+                                <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold mx-auto border border-gray-300 shadow-sm transform hover:scale-110 transition-transform cursor-default" 
+                                     style="background-color: ${circleColor}; color: #333;" 
+                                     title="Đạt: ${scoreText} / ${ds.max} điểm">
+                                    ${scoreText}
+                                </div>
+                            </td>
+                        `;
+                    } else {
+                         html += `<td class="py-3 px-2 text-center border-b text-gray-400">-</td>`;
+                    }
+                }
+                
+                html += `</tr>`;
+            });
+            
+            html += `</tbody></table></div>`;
+            tableWrapper.innerHTML = html;
+            
+            // Append to main results container
+            container.appendChild(tableWrapper);
+        }
+
 
         window.loadResults = async () => {
              // Check if Firebase is configured properly
@@ -1143,14 +1215,18 @@
             if (!examId) return customAlert("Vui lòng nhập mã đề");
 
             const container = document.getElementById('results-table-container');
-            // Xóa nội dung cũ (bảng và chart container)
-            // Giữ lại cấu trúc HTML chart ẩn
-            const tableContainer = document.querySelector('#results-table-container table');
-            if(tableContainer) tableContainer.remove();
+            
+            // Xóa nội dung cũ (bảng và thông báo loading) nhưng giữ lại các chart container
+            // Selector để xóa các phần tử con KHÔNG PHẢI là chart container
+            Array.from(container.children).forEach(child => {
+                if (!['results-chart-container', 'question-chart-container'].includes(child.id)) {
+                    child.remove();
+                }
+            });
             
             const loadingP = document.createElement('p');
-            loadingP.className = 'text-center mt-4';
-            loadingP.innerText = 'Đang tải...';
+            loadingP.className = 'text-center mt-4 text-gray-600 animate-pulse';
+            loadingP.innerText = 'Đang tải dữ liệu...';
             container.appendChild(loadingP);
 
             try {
@@ -1170,7 +1246,7 @@
                     document.getElementById('question-chart-container').classList.add('hidden');
                     
                     const p = document.createElement('p');
-                    p.className = 'text-center italic';
+                    p.className = 'text-center italic text-gray-500 mt-4';
                     p.innerText = 'Chưa có bài nộp nào.';
                     container.appendChild(p);
                     return;
@@ -1181,45 +1257,52 @@
                 
                 // --- RENDER CHARTS ---
                 renderScoreChart(results, examId); 
-                renderQuestionAnalysisChart(results, examId); // Call new chart function
+                renderQuestionAnalysisChart(results, examId);
                 // --- END CHARTS ---
 
+                // --- Render Summary Table ---
                 let htmlTable = `
                     <div class="mb-4 flex justify-between items-center mt-6">
                         <span class="font-bold text-gray-700">Tổng: ${results.length} bài nộp</span>
-                        <button onclick="exportExcel('${examId}')" class="btn bg-green-600 text-sm">📤 Xuất Excel</button>
+                        <button onclick="exportExcel('${examId}')" class="btn bg-green-600 text-sm hover:bg-green-700 shadow">📤 Xuất Excel</button>
                     </div>
-                    <table class="min-w-full bg-white border border-gray-200">
-                        <thead class="bg-gray-100">
-                            <tr>
-                                <th class="py-2 px-4 border-b text-left">Học sinh</th>
-                                <th class="py-2 px-4 border-b text-left">Lớp</th>
-                                <th class="py-2 px-4 border-b text-left">Trường</th>
-                                <th class="py-2 px-4 border-b text-center font-bold text-primary">Điểm</th>
-                                <th class="py-2 px-4 border-b text-center text-red-500">Vi phạm</th>
-                                <th class="py-2 px-4 border-b text-right">Thời gian nộp</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+                        <table class="min-w-full bg-white">
+                            <thead class="bg-gray-100 text-gray-700">
+                                <tr>
+                                    <th class="py-3 px-4 border-b text-left">Học sinh</th>
+                                    <th class="py-3 px-4 border-b text-left">Lớp</th>
+                                    <th class="py-3 px-4 border-b text-left">Trường</th>
+                                    <th class="py-3 px-4 border-b text-center font-bold text-primary">Điểm</th>
+                                    <th class="py-3 px-4 border-b text-center text-red-500">Vi phạm</th>
+                                    <th class="py-3 px-4 border-b text-right">Thời gian nộp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
                 `;
                 
                 results.forEach(r => {
                     htmlTable += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="py-2 px-4 border-b font-medium">${r.name}</td>
-                            <td class="py-2 px-4 border-b">${r.class_}</td>
-                            <td class="py-2 px-4 border-b">${r.school}</td>
-                            <td class="py-2 px-4 border-b text-center font-bold text-lg">${r.score.toFixed(2)}</td>
-                            <td class="py-2 px-4 border-b text-center text-red-500 font-bold">${r.violation_count || 0}</td>
-                            <td class="py-2 px-4 border-b text-right text-sm text-gray-500">${new Date(r.submittedAt).toLocaleString()}</td>
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="py-3 px-4 border-b font-medium">${r.name}</td>
+                            <td class="py-3 px-4 border-b">${r.class_}</td>
+                            <td class="py-3 px-4 border-b">${r.school}</td>
+                            <td class="py-3 px-4 border-b text-center font-bold text-lg text-primary">${r.score.toFixed(2)}</td>
+                            <td class="py-3 px-4 border-b text-center text-red-500 font-bold">${r.violation_count || 0}</td>
+                            <td class="py-3 px-4 border-b text-right text-sm text-gray-500">${new Date(r.submittedAt).toLocaleString()}</td>
                         </tr>
                     `;
                 });
                 
-                htmlTable += '</tbody></table>';
+                htmlTable += '</tbody></table></div>';
                 
-                // Thêm bảng vào container sau biểu đồ
-                container.insertAdjacentHTML('beforeend', htmlTable);
+                // Thêm bảng tóm tắt
+                const summaryDiv = document.createElement('div');
+                summaryDiv.innerHTML = htmlTable;
+                container.appendChild(summaryDiv);
+
+                // --- Render Detailed Scores Table (NEW) ---
+                renderDetailedScoresTable(results);
 
                 // Lưu global để export
                 window.currentResults = results;
@@ -1227,7 +1310,7 @@
             } catch (e) {
                 loadingP.remove();
                 const errP = document.createElement('p');
-                errP.className = 'text-red-500 text-center';
+                errP.className = 'text-red-500 text-center mt-4';
                 errP.innerText = `Lỗi: ${e.message}`;
                 container.appendChild(errP);
             }
@@ -1460,19 +1543,23 @@
             // --- NEW: Detailed Result for Analytics ---
             // Create an array to map original Question Index to correctness
             const detailedResult = new Array(questions.length).fill(false); 
-            // ------------------------------------------
+            // Create detailed score tracking (mapped to original index)
+            const detailedScores = new Array(questions.length).fill(null);
 
             questions.forEach((q, i) => {
                 let score = 0;
+                let maxScoreForQ = 0;
                 let uAns = null;
                 let isCorrect = false;
 
                 if (q.type === 'mcq') {
                     uAns = document.getElementById(`ans-${i}`).value;
+                    maxScoreForQ = scoring.mcq;
                     if (uAns === q.answer) { score = scoring.mcq; isCorrect = true; }
                 } 
                 else if (q.type === 'short_answer') {
                     uAns = document.getElementById(`ans-${i}`).value.trim();
+                    maxScoreForQ = scoring.sa;
                     // So sánh không phân biệt hoa thường, bỏ khoảng trắng
                     const normU = uAns.toLowerCase().replace(/\s/g, '');
                     const normA = q.answer.toLowerCase().replace(/\s/g, '');
@@ -1480,6 +1567,7 @@
                 } 
                 else if (q.type === 'true_false') {
                     uAns = [];
+                    maxScoreForQ = scoring.tf_4; // Max is getting all 4 right
                     let correctCount = 0;
                     for(let j=0; j<4; j++) {
                         const checkbox = document.getElementById(`tf-${i}-${j}`);
@@ -1503,6 +1591,7 @@
                 // Map back to original index for analysis
                 if (typeof q.originalIdx !== 'undefined') {
                     detailedResult[q.originalIdx] = isCorrect;
+                    detailedScores[q.originalIdx] = { score: score, max: maxScoreForQ };
                 }
             });
 
@@ -1517,7 +1606,8 @@
                 class_: sClass,
                 score: totalScore,
                 violation_count: violationCount, 
-                details: detailedResult, // Save detailed correctness
+                details: detailedResult, // Save detailed correctness (Boolean)
+                detailed_scores: detailedScores, // Save detailed scores (Object {score, max})
                 submittedAt: new Date().toISOString()
             };
 
