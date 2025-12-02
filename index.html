@@ -445,7 +445,14 @@
                         
                     } catch (e) {
                         console.error(e);
-                        customAlert("Lỗi khi xóa dữ liệu: " + e.message, "❌ LỖI HỆ THỐNG");
+                        // Cập nhật bắt lỗi Quyền Truy Cập cho chức năng xóa
+                        let msg = "Lỗi khi xóa dữ liệu: " + e.message;
+                         if (e.code === 'permission-denied' || e.message.toLowerCase().includes("missing or insufficient permissions")) {
+                             msg = `⛔ <b>Lỗi Quyền Truy Cập (Permission Denied)</b><br><br>
+                                   Bạn không có quyền xóa dữ liệu hệ thống.<br>
+                                   Vui lòng kiểm tra lại cấu hình Firebase Security Rules.`;
+                         }
+                        customAlert(msg, "❌ LỖI HỆ THỐNG");
                         btn.disabled = false;
                         btn.innerHTML = "🗑️ Xóa Toàn Bộ Dữ Liệu Hệ Thống";
                     }
@@ -1022,7 +1029,8 @@
             } catch (e) {
                 // Xử lý lỗi chi tiết hơn
                 let msg = e.message;
-                if (e.code === 'permission-denied') {
+                // CẬP NHẬT: Kiểm tra thêm chuỗi trong message để bắt lỗi permission denied chính xác hơn
+                if (e.code === 'permission-denied' || e.message.toLowerCase().includes("missing or insufficient permissions")) {
                     msg = `⛔ <b>Lỗi Quyền Truy Cập (Permission Denied)</b><br><br>
                            Có thể do:<br>
                            1. Bạn đang dùng cấu hình Firebase mẫu (placeholder) nhưng chạy ở môi trường ngoài.<br>
