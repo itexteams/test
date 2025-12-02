@@ -73,7 +73,7 @@
         <div class="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-md">
             <div class="flex items-center space-x-3">
                 <!-- Placeholder Logo -->
-                <img src="logo.png" class="h-10 w-10 object-contain" alt="Logo">
+                <div class="h-10 w-10 bg-gray-200 rounded-full flex items-center justify-center text-xs font-bold text-gray-500">LOGO</div>
                 <h1 class="text-xl font-bold text-gray-800">Hệ Thống Kiểm Tra Online</h1>
             </div>
             <div id="user-info" class="text-sm text-gray-500">Đang tải...</div>
@@ -180,7 +180,7 @@
 
                     <div class="flex flex-wrap gap-4 border-t pt-6">
                         <button onclick="addQuestion()" class="btn bg-green-500 hover:bg-green-600">+ Thêm Thủ Công</button>
-                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Tạo Đề</button>
+                        <button onclick="saveExam(this)" class="btn ml-auto">💾 Đạo Đề</button>
                     </div>
                 </div>
 
@@ -207,6 +207,14 @@
 
                         <!-- Table renders here -->
                         <p class="text-gray-500 text-center italic">Chưa có dữ liệu.</p>
+                    </div>
+
+                    <!-- NEW: Delete All Data Button -->
+                    <div class="mt-12 pt-6 border-t-2 border-gray-100 text-right">
+                        <p class="text-xs text-gray-400 mb-2 italic">Chức năng quản trị: Giải phóng bộ nhớ Firebase</p>
+                        <button onclick="deleteAllSystemData(this)" class="btn bg-red-600 hover:bg-red-700 text-white shadow-lg border border-red-700 flex items-center justify-center gap-2 ml-auto">
+                            🗑️ Xóa Toàn Bộ Dữ Liệu Hệ Thống
+                        </button>
                     </div>
                 </div>
             </div>
@@ -286,8 +294,20 @@
             <button id="modal-close-btn" onclick="document.getElementById('custom-alert-modal').classList.add('hidden')" class="btn bg-gray-500 hover:bg-gray-600">Đóng</button>
         </div>
     </div>
+    
+    <!-- NEW: Confirmation Modal for Delete -->
+    <div id="confirmation-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-[9999]">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center border-2 border-red-500">
+            <h3 class="text-lg font-bold text-red-600 mb-3">⚠️ CẢNH BÁO NGUY HIỂM</h3>
+            <p id="confirm-message" class="text-gray-600 mb-6"></p>
+            <div class="flex justify-center gap-4">
+                <button onclick="document.getElementById('confirmation-modal').classList.add('hidden')" class="btn bg-gray-400 hover:bg-gray-500">Hủy</button>
+                <button id="confirm-yes-btn" class="btn bg-red-600 hover:bg-red-700 text-white font-bold shadow-md">XÁC NHẬN XÓA</button>
+            </div>
+        </div>
+    </div>
 
-    <!-- Password Modal (NEW) -->
+    <!-- Password Modal -->
     <div id="password-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-[9999]">
         <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
             <h3 class="text-lg font-bold text-gray-800 mb-4">🔐 Yêu cầu Quyền Truy Cập</h3>
@@ -305,7 +325,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Đã thêm: collection, getDocs, deleteDoc
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // CONFIG
         // --- CHÚ Ý QUAN TRỌNG: KHI ĐƯA LÊN GITHUB, HÃY THAY THẾ CHUỖI JSON BÊN DƯỚI BẰNG CẤU HÌNH FIREBASE CỦA RIÊNG BẠN ---
@@ -347,7 +368,9 @@
         window.tableZoomLevel = 1.0;
 
         // Max Base64 size allowed for Firestore (approx 1.4MB in Base64 string length, safely below 1MB document limit)
-        const MAX_BASE64_SIZE = 1468006; // Corresponds to approx 1.0MB file size when encoded.
+        // GIỚI HẠN AN TOÀN: 1MB = ~1,048,576 bytes. Chuỗi Base64 ~1.33 lần kích thước file.
+        // Để an toàn, chúng ta giới hạn chuỗi Base64 dưới 1,000,000 ký tự (tương đương file ~750KB).
+        const MAX_BASE64_LENGTH_SAFE = 1000000; 
         
         // Custom Alert Function (Replaces native alert)
         // Cập nhật để nhận callback/hàm hành động khi đóng alert
@@ -370,6 +393,65 @@
             
             modal.classList.remove('hidden');
         };
+
+        // NEW: Show Confirm Dialog
+        window.showConfirm = (message, onConfirm) => {
+            document.getElementById('confirm-message').innerHTML = message;
+            const modal = document.getElementById('confirmation-modal');
+            const yesBtn = document.getElementById('confirm-yes-btn');
+            
+            // Clone nút để xóa các event listener cũ
+            const newBtn = yesBtn.cloneNode(true);
+            yesBtn.parentNode.replaceChild(newBtn, yesBtn);
+            
+            newBtn.onclick = () => {
+                modal.classList.add('hidden');
+                if (typeof onConfirm === 'function') onConfirm();
+            };
+            
+            modal.classList.remove('hidden');
+        };
+
+        // NEW: Delete All Data Function
+        window.deleteAllSystemData = (btnElement) => {
+            const btn = btnElement;
+            
+            window.showConfirm(
+                `Bạn có chắc chắn muốn <b class="text-red-600">XÓA TOÀN BỘ DỮ LIỆU</b> (Đề thi, Câu hỏi, Kết quả) không?<br><br>
+                 Hành động này sẽ giải phóng bộ nhớ Firebase nhưng <b class="text-red-600">KHÔNG THỂ HOÀN TÁC</b>. Tất cả bài làm của học sinh sẽ bị mất.`,
+                async () => {
+                    btn.disabled = true;
+                    btn.innerHTML = "⏳ Đang xóa dữ liệu...";
+                    
+                    try {
+                        const collections = ['itex_exams', 'itex_questions', 'itex_results'];
+                        let deletedCount = 0;
+
+                        for (const colName of collections) {
+                            const colRef = collection(db, 'artifacts', appId, 'public', 'data', colName);
+                            const snapshot = await getDocs(colRef);
+                            
+                            // Xóa từng document (Firestore không hỗ trợ xóa cả collection trực tiếp từ client SDK web đơn giản)
+                            const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+                            await Promise.all(deletePromises);
+                            deletedCount += snapshot.size;
+                        }
+                        
+                        customAlert(
+                            `Đã xóa thành công tổng cộng <b>${deletedCount}</b> tài liệu (đề, câu hỏi, bài làm).<br>Bộ nhớ hệ thống đã được giải phóng.`, 
+                            "✅ ĐÃ XÓA THÀNH CÔNG",
+                            () => location.reload()
+                        );
+                        
+                    } catch (e) {
+                        console.error(e);
+                        customAlert("Lỗi khi xóa dữ liệu: " + e.message, "❌ LỖI HỆ THỐNG");
+                        btn.disabled = false;
+                        btn.innerHTML = "🗑️ Xóa Toàn Bộ Dữ Liệu Hệ Thống";
+                    }
+                }
+            );
+        }
 
         // Hàm kiểm tra cấu hình Firebase
         const isFirebaseConfigured = () => {
@@ -809,6 +891,14 @@
                 return;
             }
 
+            // Check Auth explicitly
+            if (!auth.currentUser) {
+                customAlert("Lỗi: Chưa đăng nhập. Vui lòng tải lại trang.", "LỖI XÁC THỰC");
+                btn.disabled = false;
+                btn.innerText = "💾 Tạo đề";
+                return;
+            }
+
             try {
                 const tNameInput = document.getElementById('t-name');
                 const tName = tNameInput.value.trim();
@@ -850,12 +940,12 @@
                          throw new Error(`Câu ${i+1} chưa chọn ảnh đề bài!`);
                     }
 
-                    // --- NEW SIZE CHECK (Prevent 1MB limit error) ---
-                    if (imgBase64.length > MAX_BASE64_SIZE) {
-                        throw new Error(`Kích thước ảnh câu hỏi ${i + 1} quá lớn (${(imgBase64.length/1024/1024).toFixed(2)}MB Base64). Vui lòng sử dụng ảnh có kích thước gốc **dưới 1MB**.`);
+                    // --- NEW SIZE CHECK (Prevent 1MB limit error & Permission Denied on large payload) ---
+                    if (imgBase64.length > MAX_BASE64_LENGTH_SAFE) {
+                        throw new Error(`Ảnh câu ${i + 1} quá lớn (>750KB). Vui lòng nén ảnh hoặc chọn ảnh nhỏ hơn.`);
                     }
-                    if (solBase64 && solBase64.length > MAX_BASE64_SIZE) {
-                        throw new Error(`Kích thước ảnh lời giải câu hỏi ${i + 1} quá lớn (${(solBase64.length/1024/1024).toFixed(2)}MB Base64). Vui lòng sử dụng ảnh có kích thước gốc **dưới 1MB**.`);
+                    if (solBase64 && solBase64.length > MAX_BASE64_LENGTH_SAFE) {
+                        throw new Error(`Ảnh lời giải câu ${i + 1} quá lớn (>750KB). Vui lòng nén ảnh hoặc chọn ảnh nhỏ hơn.`);
                     }
                     // --- END NEW SIZE CHECK ---
 
@@ -930,8 +1020,21 @@
                 });
 
             } catch (e) {
-                customAlert(e.message, "Lỗi Lưu Đề Thi");
-                if (!e.message.startsWith("Vui lòng") && !e.message.startsWith("Đề thi") && !e.message.startsWith("Câu") && !e.message.startsWith("Kích thước")) {
+                // Xử lý lỗi chi tiết hơn
+                let msg = e.message;
+                if (e.code === 'permission-denied') {
+                    msg = `⛔ <b>Lỗi Quyền Truy Cập (Permission Denied)</b><br><br>
+                           Có thể do:<br>
+                           1. Bạn đang dùng cấu hình Firebase mẫu (placeholder) nhưng chạy ở môi trường ngoài.<br>
+                           2. Ảnh bạn tải lên quá lớn (dù đã kiểm tra nhưng tổng request vẫn quá nặng).<br>
+                           3. Vui lòng thử lại với ảnh nhỏ hơn hoặc cập nhật cấu hình Firebase của riêng bạn.`;
+                } else if (e.code === 'invalid-argument') {
+                     msg = `⛔ <b>Lỗi Dữ Liệu (Invalid Argument)</b><br>Dữ liệu (thường là ảnh) quá lớn so với giới hạn của Firebase.`;
+                }
+                
+                customAlert(msg, "Lỗi Lưu Đề Thi");
+                
+                if (!e.message.startsWith("Vui lòng") && !e.message.startsWith("Đề thi") && !e.message.startsWith("Câu") && !e.message.startsWith("Kích thước") && !e.message.startsWith("Ảnh")) {
                      console.error(e);
                 }
                 btn.disabled = false;
