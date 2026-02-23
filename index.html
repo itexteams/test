@@ -1161,7 +1161,7 @@
         }
 
 
-        // --- NEW: Helper to render Detailed Scores Table ---
+        // --- UPDATED: Helper to render Detailed Scores Table with Vertical Scroll ---
         const renderDetailedScoresTable = (results) => {
             const container = document.getElementById('results-table-container');
             const sample = results.find(r => r.detailed_scores && Array.isArray(r.detailed_scores));
@@ -1177,23 +1177,23 @@
                 <div class="p-4 border-b bg-gray-50 flex justify-between items-center flex-wrap gap-2">
                     <h3 class="text-xl font-bold text-gray-800">Chi tiết điểm từng câu</h3>
                     <div class="flex items-center space-x-2 bg-white px-3 py-1 rounded border shadow-sm">
-                         <span class="text-xs font-semibold text-gray-500 uppercase mr-1">Zoom:</span>
-                         <button onclick="zoomTable(-0.1)" class="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-bold">-</button>
-                         <span id="zoom-level-display" class="text-sm font-bold w-12 text-center">100%</span>
-                         <button onclick="zoomTable(0.1)" class="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-bold">+</button>
-                         <button onclick="zoomTable(0)" class="text-xs text-blue-600 hover:underline ml-2">Reset</button>
+                        <span class="text-xs font-semibold text-gray-500 uppercase mr-1">Zoom:</span>
+                        <button onclick="zoomTable(-0.1)" class="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-bold">-</button>
+                        <span id="zoom-level-display" class="text-sm font-bold w-12 text-center">100%</span>
+                        <button onclick="zoomTable(0.1)" class="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-bold">+</button>
+                        <button onclick="zoomTable(0)" class="text-xs text-blue-600 hover:underline ml-2">Reset</button>
                     </div>
                 </div>
-                <div class="overflow-x-auto overflow-y-hidden" style="max-height: 80vh;">
-                    <table id="detailed-scores-table" class="min-w-full text-sm transition-transform duration-200 origin-top-left">
-                        <thead class="bg-gray-100 text-gray-700">
+                <div class="overflow-x-auto overflow-y-auto" style="max-height: 600px;">
+                    <table id="detailed-scores-table" class="min-w-full text-sm transition-transform duration-200 origin-top-left border-collapse">
+                        <thead class="text-gray-700">
                             <tr>
-                                <th class="py-3 px-4 text-left font-bold sticky left-0 bg-gray-100 z-10 shadow-sm border-b">Học sinh</th>
-                                <th class="py-3 px-4 text-center font-bold text-primary border-b">Tổng điểm</th>
+                                <th class="py-3 px-4 text-left font-bold sticky top-0 left-0 bg-gray-200 z-30 border-b shadow-sm">Học sinh</th>
+                                <th class="py-3 px-4 text-center font-bold text-primary sticky top-0 bg-gray-100 z-20 border-b shadow-sm">Tổng điểm</th>
             `;
             
             for(let i=0; i<questionCount; i++) {
-                html += `<th class="py-3 px-2 text-center font-semibold border-b min-w-[60px]">Câu ${i+1}</th>`;
+                html += `<th class="py-3 px-2 text-center font-semibold sticky top-0 bg-gray-100 z-20 border-b shadow-sm min-w-[60px]">Câu ${i+1}</th>`;
             }
             
             html += `</tr></thead><tbody>`;
@@ -1204,41 +1204,38 @@
                 const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                 
                 html += `<tr class="${bgClass} hover:bg-gray-100 transition-colors">
-                    <td class="py-3 px-4 font-medium text-gray-800 sticky left-0 ${bgClass} z-10 shadow-sm border-b">${r.name}</td>
+                    <td class="py-3 px-4 font-medium text-gray-800 sticky left-0 ${bgClass} z-10 border-b shadow-sm">${r.name}</td>
                     <td class="py-3 px-4 text-center font-bold text-xl text-primary border-b">${r.score.toFixed(2)}</td>
                 `;
                 
                 for(let i=0; i<questionCount; i++) {
                     const ds = r.detailed_scores[i];
-                    let circleColor = '#FA6D62'; // Mặc định Đỏ (0 điểm)
+                    let circleColor = '#FA6D62'; 
                     let scoreText = '-';
 
                     if (ds) {
                         scoreText = parseFloat(ds.score.toFixed(2));
-                        if (ds.score === ds.max) circleColor = '#5EFC93'; // Xanh (Max điểm)
-                        else if (ds.score > 0) circleColor = '#EAF862';   // Vàng (>0)
+                        if (ds.score === ds.max) circleColor = '#5EFC93';
+                        else if (ds.score > 0) circleColor = '#EAF862';
                         
                         html += `
                             <td class="py-3 px-2 text-center border-b">
                                 <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold mx-auto border border-gray-300 shadow-sm transform hover:scale-110 transition-transform cursor-default" 
-                                     style="background-color: ${circleColor}; color: #333;" 
-                                     title="Đạt: ${scoreText} / ${ds.max} điểm">
+                                    style="background-color: ${circleColor}; color: #333;" 
+                                    title="Đạt: ${scoreText} / ${ds.max} điểm">
                                     ${scoreText}
                                 </div>
                             </td>
                         `;
                     } else {
-                         html += `<td class="py-3 px-2 text-center border-b text-gray-400">-</td>`;
+                        html += `<td class="py-3 px-2 text-center border-b text-gray-400">-</td>`;
                     }
                 }
-                
                 html += `</tr>`;
             });
             
             html += `</tbody></table></div></div>`;
             tableWrapper.innerHTML = html;
-            
-            // Append to main results container
             container.appendChild(tableWrapper);
         }
 
