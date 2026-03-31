@@ -243,12 +243,38 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global State
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'itex-standard';
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        /** * THIẾT LẬP FIREBASE (Dành cho GitHub Pages / Local)
+         * Nếu bạn chạy trên GitHub, hãy thay thế các thông số bên dưới bằng thông số từ Firebase Console của bạn.
+         */
+        const myGitHubFirebaseConfig = {
+            apiKey: "DÁN_API_KEY_CỦA_BẠN_VÀO_ĐÂY",
+            authDomain: "Tên-Dự-Án.firebaseapp.com",
+            projectId: "Tên-Dự-Án",
+            storageBucket: "Tên-Dự-Án.appspot.com",
+            messagingSenderId: "ID_GỬI_TIN_NHẮN",
+            appId: "ID_ỨNG_DỤNG"
+        };
+
+        // Kiểm tra xem đang chạy trong môi trường Canvas hay GitHub
+        const isCanvas = typeof __firebase_config !== 'undefined';
+        const firebaseConfig = isCanvas ? JSON.parse(__firebase_config) : myGitHubFirebaseConfig;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'itex-standard-app';
+
+        // Khởi tạo
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+            document.getElementById('loading').innerHTML = `
+                <div class="p-4 bg-red-100 text-red-700 rounded-lg">
+                    <p class="font-bold">Lỗi khởi tạo Firebase!</p>
+                    <p class="text-sm">Vui lòng kiểm tra cấu hình Firebase trong mã nguồn (dòng 239).</p>
+                </div>
+            `;
+        }
 
         let user = null;
         let currentExam = null;
@@ -271,13 +297,17 @@
 
         // Auth
         const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error", error);
             }
         };
-        initAuth();
+        if (auth) initAuth();
 
         onAuthStateChanged(auth, (u) => {
             if(u) {
