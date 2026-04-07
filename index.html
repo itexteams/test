@@ -108,7 +108,7 @@
                 <div class="card">
                     <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 mb-6">📝 Tạo Đề Kiểm Tra Mới</h2>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 mb-2">Họ tên Giáo viên <span class="text-red-500">*</span></label>
                             <input type="text" id="t-name" class="input-field" placeholder="Nhập tên của bạn">
@@ -116,6 +116,11 @@
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 mb-2">Thời gian làm bài (phút)</label>
                             <input type="number" id="t-time" class="input-field" value="15" min="1">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Số lần đăng nhập tối đa/thiết bị</label>
+                            <input type="number" id="t-max-attempts" class="input-field" value="1" min="1" title="Ngăn học sinh F5 hoặc thoát ra vào lại">
+                            <p class="text-xs text-gray-500 mt-1 italic">Ngăn F5/Thoát ra vào lại</p>
                         </div>
                     </div>
                     
@@ -229,8 +234,8 @@
                         <input type="text" id="s-name" class="input-field" placeholder="Họ và tên học sinh">
                         <input type="text" id="s-school" class="input-field" placeholder="Trường">
                         <input type="text" id="s-class" class="input-field" placeholder="Lớp">
-                        <!-- Đã sửa: Truyền đối tượng event vào hàm startExam -->
-                        <button onclick="startExam(event)" class="btn w-full py-3 font-bold bg-green-600 hover:bg-green-700">🚀 BẮT ĐẦU LÀM BÀI</button>
+                        <!-- Đã sửa: Thêm ID cho nút để dễ dàng disable -->
+                        <button id="btn-start-exam" onclick="startExam(event)" class="btn w-full py-3 font-bold bg-green-600 hover:bg-green-700">🚀 BẮT ĐẦU LÀM BÀI</button>
                     </div>
                 </div>
 
@@ -814,6 +819,7 @@
                 const tNameInput = document.getElementById('t-name');
                 const tName = tNameInput.value.trim();
                 const tTime = document.getElementById('t-time').value;
+                const tMaxAttempts = document.getElementById('t-max-attempts').value; // Lấy giá trị số lần đăng nhập
                 const tReview = document.getElementById('t-review').checked;
                 // Add: Get view score config
                 const tShowScore = document.getElementById('t-show-score').checked;
@@ -894,6 +900,7 @@
                 const examMetadata = {
                     teacher: tName,
                     time: parseInt(tTime),
+                    max_attempts: parseInt(tMaxAttempts) || 1, // Lưu giới hạn số lần đăng nhập
                     allow_review: tReview,
                     view_score: tShowScore, // Add metadata
                     scoring,
@@ -1407,12 +1414,33 @@
                 currentExamData = docSnap.data();
                 currentExamData.id = examId; // Lưu ID lại
                 
+                // KIỂM TRA SỐ LẦN ĐĂNG NHẬP TRÊN THIẾT BỊ NÀY
+                const attemptKey = `itex_attempt_${examId}`;
+                let currentAttempts = parseInt(localStorage.getItem(attemptKey)) || 0;
+                const maxAttempts = currentExamData.max_attempts || 1; // Mặc định 1 nếu đề cũ không có cài đặt này
+                const remaining = maxAttempts - currentAttempts;
+
+                let attemptMsg = "";
+                const btnStart = document.getElementById('btn-start-exam');
+
+                if (remaining <= 0) {
+                    attemptMsg = `<br><span class="text-red-600 font-bold text-base">⛔ Thiết bị này đã hết lượt vào thi (${maxAttempts}/${maxAttempts} lần).</span>`;
+                    btnStart.disabled = true;
+                    btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    attemptMsg = `<br><span class="text-blue-600 font-bold text-sm">Lưu ý: Thiết bị này còn ${remaining} lượt đăng nhập.</span>`;
+                    btnStart.disabled = false;
+                    btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+                
                 document.getElementById('student-entry').classList.add('hidden');
                 document.getElementById('student-info-form').classList.remove('hidden');
-                document.getElementById('exam-info-display').innerText = `Đề của GV: ${currentExamData.teacher} - Thời gian: ${currentExamData.time} phút`;
+                document.getElementById('exam-info-display').innerHTML = `Đề của GV: ${currentExamData.teacher} - Thời gian: ${currentExamData.time} phút ${attemptMsg}`;
 
             } catch (e) {
                 customAlert(e.message);
+            } finally {
+                // Đảm bảo nút luôn được bật lại nếu người dùng nhập mã khác
                 btn.disabled = false;
                 btn.innerText = "Kiểm Tra Mã Đề";
             }
@@ -1425,6 +1453,15 @@
             const sClass = document.getElementById('s-class').value.trim();
 
             if (!name || !school || !sClass) return customAlert("Vui lòng điền đầy đủ thông tin");
+
+            // KIỂM TRA LẠI LƯỢT TRUY CẬP TRƯỚC KHI VÀO (Bảo mật kép)
+            const attemptKey = `itex_attempt_${currentExamData.id}`;
+            let currentAttempts = parseInt(localStorage.getItem(attemptKey)) || 0;
+            const maxAttempts = currentExamData.max_attempts || 1;
+
+            if (currentAttempts >= maxAttempts) {
+                return customAlert(`Thiết bị của bạn đã hết lượt truy cập vào mã đề này (Tối đa ${maxAttempts} lần). Hành động bị chặn!`, "HẾT LƯỢT THI");
+            }
 
             // Fix Path: itex_results/{examId}
             const resSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', currentExamData.id));
@@ -1483,6 +1520,9 @@
 
                 // BẮT ĐẦU GHI NHẬN THỜI GIAN
                 examStartTime = new Date(); // LƯU THỜI GIAN BẮT ĐẦU VÀO BIẾN TOÀN CỤC
+
+                // GHI NHẬN 1 LẦN ĐĂNG NHẬP VÀO BỘ NHỚ TRÌNH DUYỆT
+                localStorage.setItem(attemptKey, currentAttempts + 1);
 
                 renderStudentQuestions();
                 startTimer(currentExamData.time);
