@@ -64,6 +64,57 @@
         
         .fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Thanh trạng thái câu hỏi chưa làm */
+        #unanswered-tracker {
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.05);
+        }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .q-circle {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #fca5a5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            flex-shrink: 0;
+        }
+        .q-circle:hover {
+            background-color: #f87171;
+            color: white;
+            transform: translateY(-3px) scale(1.1);
+            box-shadow: 0 4px 6px rgba(248, 113, 113, 0.4);
+        }
+        /* Hiệu ứng khi câu hỏi đã được trả lời */
+        .q-circle.answered {
+            opacity: 0;
+            transform: scale(0);
+            width: 0;
+            height: 0;
+            margin: 0;
+            padding: 0;
+            border-width: 0;
+            pointer-events: none;
+        }
+        /* Highlight câu hỏi khi được bấm từ tracker */
+        .highlight-question {
+            animation: pulse-border 1.5s ease-out;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(20, 188, 156, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(20, 188, 156, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(20, 188, 156, 0); }
+        }
     </style>
 </head>
 <body class="p-4 min-h-screen flex flex-col items-center">
@@ -200,7 +251,7 @@
                     </div>
                 </div>
 
-                <!-- Live Tracking Section (NEW) -->
+                <!-- Live Tracking Section -->
                 <div class="card bg-blue-50 border border-blue-200 mb-6">
                     <h2 class="text-2xl font-bold text-blue-800 border-b border-blue-200 pb-4 mb-6 flex items-center gap-2">
                         📡 Theo Dõi Học Sinh Làm Bài (Live)
@@ -292,8 +343,20 @@
 
                     <div id="exam-questions-render" class="space-y-8"></div>
 
-                    <div class="mt-8 text-center">
+                    <div class="mt-8 text-center mb-24"> <!-- Added mb-24 to prevent bottom tracker from overlapping button -->
                         <button onclick="submitExam()" id="btn-submit" class="btn py-4 px-12 text-xl shadow-xl">Nộp Bài</button>
+                    </div>
+
+                    <!-- THÊM MỚI: Thanh Tracker ghim dưới đáy màn hình -->
+                    <div id="unanswered-tracker" class="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-red-200 p-3 z-50 transform translate-y-full">
+                        <div class="max-w-5xl mx-auto flex items-center">
+                            <span class="text-sm font-bold text-red-600 mr-3 whitespace-nowrap flex items-center gap-1">
+                                ⚠️ Đang bỏ trống:
+                            </span>
+                            <div id="unanswered-circles" class="flex-grow flex flex-nowrap gap-2 overflow-x-auto pb-2 pt-2 scrollbar-hide scroll-smooth">
+                                <!-- Vòng tròn sẽ được tạo bằng JS -->
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1394,6 +1457,23 @@
             
             window.currentProgress[idx] = isAnswered;
             
+            const circle = document.getElementById(`tracker-circle-${idx}`);
+            if (circle) {
+                if (isAnswered) {
+                    circle.classList.add('answered');
+                } else {
+                    circle.classList.remove('answered');
+                }
+            }
+            
+            const allAnswered = window.currentProgress.every(v => v === true);
+            const trackerBar = document.getElementById('unanswered-tracker');
+            if (allAnswered) {
+                trackerBar.classList.add('translate-y-full'); 
+            } else {
+                trackerBar.classList.remove('translate-y-full'); 
+            }
+
             if (progressTimeout) clearTimeout(progressTimeout);
             progressTimeout = setTimeout(async () => {
                 try {
@@ -1415,6 +1495,32 @@
                 if(document.getElementById(`tf-${idx}-${j}`).checked) answered = true;
             }
             updateProgress(idx, answered);
+        }
+
+        window.initUnansweredTracker = (totalQ) => {
+            const trackerDiv = document.getElementById('unanswered-circles');
+            trackerDiv.innerHTML = '';
+            
+            for (let i = 0; i < totalQ; i++) {
+                const circle = document.createElement('div');
+                circle.id = `tracker-circle-${i}`;
+                circle.className = 'q-circle';
+                circle.innerText = i + 1;
+                circle.title = `Chưa làm câu ${i + 1}`;
+                circle.onclick = () => {
+                    const qCard = document.getElementById(`question-card-${i}`);
+                    if(qCard) {
+                        qCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        qCard.classList.add('highlight-question', 'border-2', 'border-primary');
+                        setTimeout(() => {
+                            qCard.classList.remove('highlight-question', 'border-2', 'border-primary');
+                        }, 1500);
+                    }
+                };
+                trackerDiv.appendChild(circle);
+            }
+            
+            document.getElementById('unanswered-tracker').classList.remove('translate-y-full');
         }
 
         window.startExam = async (event) => {
@@ -1494,6 +1600,7 @@
 
                 renderStudentQuestions();
                 startTimer(currentExamData.time);
+                initUnansweredTracker(currentExamData.question_count);
 
             } catch(e) {
                 customAlert("Lỗi khi tải đề thi: " + e.message);
@@ -1546,7 +1653,8 @@
                 }
 
                 const div = document.createElement('div');
-                div.className = "card";
+                div.className = "card transition-all duration-300"; 
+                div.id = `question-card-${i}`; 
                 div.innerHTML = `
                     <div class="mb-4">
                         <span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold uppercase mb-2 inline-block">
@@ -1589,6 +1697,8 @@
         }
 
         window.submitExam = async () => {
+            document.getElementById('unanswered-tracker').classList.add('translate-y-full');
+            
             clearInterval(examTimer);
             document.getElementById('btn-submit').disabled = true;
             document.getElementById('btn-submit').innerText = "Đang chấm điểm...";
