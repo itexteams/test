@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>iTeX - Hệ Thống Kiểm Tra Online</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,6 +13,12 @@
     <!-- Chart.js for visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
+        /* THÊM MỚI: Ngăn chặn Pull-to-refresh (Vuốt để tải lại) trên trình duyệt di động */
+        html, body { 
+            overscroll-behavior-y: none; 
+            overscroll-behavior-x: none;
+        }
+
         body { font-family: 'Inter', sans-serif; background-color: #87F5DB; }
         
         /* Custom Colors */
@@ -118,12 +124,11 @@
     </style>
 </head>
 <body class="p-4 min-h-screen flex flex-col items-center">
-
     <div id="app-container" class="w-full max-w-5xl">
         <!-- Header -->
         <div class="flex items-center justify-between mb-6 bg-white p-4 rounded-xl shadow-md">
             <div class="flex items-center space-x-3">
-                <img src="logo.png" class="h-10 w-10 object-contain" alt="Logo">
+                <div class="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center font-bold text-xl">iT</div>
                 <h1 class="text-xl font-bold text-gray-800">Hệ Thống Kiểm Tra Online</h1>
             </div>
             <div id="user-info" class="text-sm text-gray-500">Đang tải...</div>
@@ -332,7 +337,7 @@
                 </div>
 
                 <!-- Taking Exam (Hidden initially) -->
-                <div id="taking-exam" class="hidden">
+                <div id="taking-exam" class="hidden relative">
                     <div class="sticky top-4 z-50 bg-white p-4 rounded-xl shadow-lg border-2 border-primary mb-6 flex flex-wrap justify-between items-center gap-2">
                         <div class="flex flex-col">
                             <span class="font-bold text-gray-700">Thí sinh: <span id="display-s-name"></span></span>
@@ -341,13 +346,13 @@
                         <div id="timer" class="text-2xl font-mono font-bold text-red-600">00:00</div>
                     </div>
 
-                    <div id="exam-questions-render" class="space-y-8"></div>
+                    <div id="exam-questions-render" class="space-y-8 pb-10"></div>
 
-                    <div class="mt-8 text-center mb-24"> <!-- Added mb-24 to prevent bottom tracker from overlapping button -->
-                        <button onclick="submitExam()" id="btn-submit" class="btn py-4 px-12 text-xl shadow-xl">Nộp Bài</button>
+                    <div class="mt-8 text-center mb-24"> 
+                        <button onclick="submitExam()" id="btn-submit" class="btn py-4 px-12 text-xl shadow-xl hover:scale-105 transition-transform">Nộp Bài</button>
                     </div>
 
-                    <!-- THÊM MỚI: Thanh Tracker ghim dưới đáy màn hình -->
+                    <!-- Thanh Tracker ghim dưới đáy màn hình -->
                     <div id="unanswered-tracker" class="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-red-200 p-3 z-50 transform translate-y-full">
                         <div class="max-w-5xl mx-auto flex items-center">
                             <span class="text-sm font-bold text-red-600 mr-3 whitespace-nowrap flex items-center gap-1">
@@ -442,6 +447,9 @@
         let questionChartInstance = null;
         let violationCount = 0;
         let examStartTime = null;
+        
+        // THÊM MỚI: Biến lưu trạng thái đang thi để ngăn reload
+        let isExamInProgress = false; 
 
         // Live Tracking Variables
         let liveUnsubscribe = null;
@@ -505,6 +513,34 @@
             window.customAlert("Ứng dụng đang chạy trong chế độ cục bộ/preview HOẶC thiếu cấu hình Firebase.", "LƯU Ý QUAN TRỌNG");
         }
 
+        // THÊM MỚI: Hàm chặn sự kiện reload/thoát trang khi đang thi
+        const handleBeforeUnload = (e) => {
+            if (isExamInProgress) {
+                // Trình duyệt sẽ hiện hộp thoại mặc định cảnh báo mất dữ liệu
+                e.preventDefault(); 
+                e.returnValue = 'Bạn đang trong quá trình làm bài. Nếu thoát hoặc tải lại trang, kết quả của bạn sẽ không được lưu!'; 
+                return e.returnValue;
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        // THÊM MỚI: Chặn tuyệt đối thao tác vuốt xuống (pull-to-refresh) bằng JS trên các máy cũ
+        let lastTouchY = 0;
+        document.addEventListener('touchstart', (e) => {
+            if(e.touches.length > 0) lastTouchY = e.touches[0].clientY;
+        }, {passive: true});
+
+        document.addEventListener('touchmove', (e) => {
+            if(isExamInProgress) {
+                const currentY = e.touches[0].clientY;
+                // Nếu đang cuộn lên trên (vuốt màn hình xuống) và đang ở top 0 của trang
+                if (currentY > lastTouchY && window.scrollY <= 0) {
+                    e.preventDefault(); // Chặn hành vi mặc định của trình duyệt
+                }
+            }
+        }, {passive: false}); // Đặt passive: false để có thể gọi preventDefault()
+
+
         window.setRole = (role) => {
             if(role === 'teacher') {
                 document.getElementById('password-modal').classList.remove('hidden');
@@ -555,7 +591,7 @@
         }
 
         const handleVisibilityChange = () => {
-            if (document.hidden) {
+            if (document.hidden && isExamInProgress) {
                 violationCount++;
                 document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
                 customAlert(`
@@ -1597,6 +1633,9 @@
 
                 examStartTime = new Date(); 
                 localStorage.setItem(attemptKey, currentAttempts + 1);
+                
+                // THÊM MỚI: Bật cờ đánh dấu đang trong giờ làm bài
+                isExamInProgress = true;
 
                 renderStudentQuestions();
                 startTimer(currentExamData.time);
@@ -1697,6 +1736,9 @@
         }
 
         window.submitExam = async () => {
+            // THÊM MỚI: Tắt trạng thái đang thi, cho phép tải lại trang bình thường
+            isExamInProgress = false; 
+
             document.getElementById('unanswered-tracker').classList.add('translate-y-full');
             
             clearInterval(examTimer);
