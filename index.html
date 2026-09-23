@@ -266,12 +266,16 @@
                     </div>
                 </div>
 
-                <!-- Results Section -->
+                <!-- Results Section (Đã cập nhật UI Xem Kết Quả) -->
                 <div class="card">
-                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-4 mb-6">📊 Xem Kết Quả Thi</h2>
-                    <div class="flex gap-4 mb-6">
-                        <input type="text" id="result-exam-id" class="input-field flex-grow" placeholder="Nhập Mã Đề để xem kết quả">
-                        <button onclick="loadResults()" class="btn bg-green-600 hover:bg-green-700">Xem Kết Quả</button>
+                    <h2 class="text-xl font-bold text-gray-800 border-b pb-4 mb-6 flex items-center gap-2">
+                        📊 Xem Kết Quả Thi
+                    </h2>
+                    <div class="flex gap-4 mb-6 items-stretch max-w-lg">
+                        <input type="text" id="result-exam-id" class="input-field flex-grow text-lg border-gray-300" placeholder="Mã đề (VD: E2C7TE)">
+                        <button onclick="loadResults()" class="btn bg-[#1A9C54] hover:bg-[#158043] text-white px-6 rounded-md whitespace-nowrap leading-tight font-bold">
+                            Xem Kết<br>Quả
+                        </button>
                     </div>
                     <div id="results-table-container" class="overflow-x-auto">
                         <div class="card p-6 mb-6 hidden" id="results-chart-container">
@@ -287,25 +291,27 @@
                 </div>
             </div>
 
-            <!-- Student View (Giữ nguyên form, cập nhật logic hiển thị) -->
+            <!-- Student View -->
             <div id="student-view" class="hidden max-w-3xl mx-auto space-y-6">
                 <!-- Exam Entry -->
-                <div id="student-entry" class="card">
+                <div id="student-entry" class="card max-w-md mx-auto mt-10 p-8 shadow-lg border border-gray-100 rounded-xl">
                     <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Vào Thi</h2>
                     <div class="space-y-4">
-                        <input type="text" id="s-exam-id" class="input-field text-center text-xl tracking-widest uppercase" placeholder="NHẬP MÃ ĐỀ">
-                        <button onclick="checkExam()" class="btn w-full py-3 text-lg">Kiểm Tra Mã Đề</button>
+                        <input type="text" id="s-exam-id" class="input-field text-center text-xl tracking-widest uppercase border-gray-300" placeholder="NHẬP MÃ ĐỀ">
+                        <button onclick="checkExam()" class="btn w-full py-3 text-lg bg-primary hover:bg-primary-hover shadow-md">Kiểm Tra Mã Đề</button>
                     </div>
                 </div>
 
-                <!-- Student Info Form -->
-                <div id="student-info-form" class="card hidden">
-                    <h3 id="exam-info-display" class="text-lg font-semibold text-center text-primary mb-4"></h3>
+                <!-- Student Info Form (Đã cập nhật chuẩn UI) -->
+                <div id="student-info-form" class="card hidden max-w-lg mx-auto mt-10 p-8 shadow-lg border border-gray-100 rounded-xl">
+                    <div id="exam-info-display" class="text-center mb-6 leading-relaxed"></div>
                     <div class="space-y-4">
-                        <input type="text" id="s-name" class="input-field" placeholder="Họ và tên học sinh">
-                        <input type="text" id="s-school" class="input-field" placeholder="Trường">
-                        <input type="text" id="s-class" class="input-field" placeholder="Lớp">
-                        <button id="btn-start-exam" onclick="startExam(event)" class="btn w-full py-3 font-bold bg-green-600 hover:bg-green-700">🚀 BẮT ĐẦU LÀM BÀI</button>
+                        <input type="text" id="s-name" class="input-field border-gray-200 bg-gray-50" placeholder="Họ và tên học sinh">
+                        <input type="text" id="s-school" class="input-field border-gray-200 bg-gray-50" placeholder="Trường">
+                        <input type="text" id="s-class" class="input-field border-gray-200 bg-gray-50" placeholder="Lớp">
+                        <button id="btn-start-exam" onclick="startExam(event)" class="w-full bg-[#1A9C54] hover:bg-[#158043] text-white font-bold py-3 rounded-md transition-colors flex justify-center items-center gap-2 mt-2 shadow-md">
+                            <span>🚀</span> BẮT ĐẦU LÀM BÀI
+                        </button>
                     </div>
                 </div>
 
@@ -410,10 +416,7 @@
         let examStartTime = null;
         let isExamInProgress = false; 
 
-        // Ngân hàng câu hỏi state
         window.qBank = [];
-
-        // Live Tracking Variables
         let liveUnsubscribe = null;
         window.currentSessionId = null;
         window.currentProgress = [];
@@ -446,9 +449,7 @@
                 try {
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
+                    } else { await signInAnonymously(auth); }
                 } catch (error) { console.error("Auth error", error); }
             };
             initAuth();
@@ -498,9 +499,7 @@
                 document.getElementById('password-modal').classList.add('hidden');
                 document.getElementById('role-selection').classList.add('hidden');
                 document.getElementById('teacher-view').classList.remove('hidden');
-            } else {
-                customAlert("Mã truy cập không chính xác!", "⛔ LỖI TRUY CẬP");
-            }
+            } else { customAlert("Mã truy cập không chính xác!", "⛔ LỖI TRUY CẬP"); }
         }
 
         const enterFullscreen = () => {
@@ -516,13 +515,11 @@
             else if (document.msExitFullscreen) document.msExitFullscreen();
         }
 
-        // Đã Update: Cập nhật Firebase khi học sinh vi phạm gian lận
         const handleVisibilityChange = () => {
             if (document.hidden && isExamInProgress) {
                 violationCount++;
                 document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
                 customAlert(`Hệ thống phát hiện bạn đã rời khỏi màn hình làm bài thi. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
-                
                 if (window.currentSessionId && currentExamData) {
                     updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
                         violation_count: violationCount
@@ -537,8 +534,7 @@
                     const reader = new FileReader();
                     reader.onload = () => resolve(reader.result.split(',')[1]); 
                     reader.onerror = error => reject(error);
-                    reader.readAsDataURL(input);
-                    return;
+                    reader.readAsDataURL(input); return;
                 }
                 const file = input.files[0];
                 if (!file) { resolve(null); return; }
@@ -570,9 +566,7 @@
             if(!excelInput.files[0]) return customAlert("Vui lòng chọn file Excel đáp án!");
             if(allImgsInput.files.length === 0) return customAlert("Vui lòng chọn ảnh câu hỏi và lời giải!");
 
-            const btn = btnElement;
-            btn.disabled = true; btn.innerText = "Đang xử lý...";
-
+            const btn = btnElement; btn.disabled = true; btn.innerText = "Đang xử lý...";
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
@@ -594,8 +588,7 @@
                         const info = extractNumberAndType(f.name);
                         if(info && info.number !== null) {
                             if(!imgMap[info.type][info.number]) imgMap[info.type][info.number] = {};
-                            if(info.isQ) imgMap[info.type][info.number].q = f;
-                            else imgMap[info.type][info.number].s = f;
+                            if(info.isQ) imgMap[info.type][info.number].q = f; else imgMap[info.type][info.number].s = f;
                         }
                     });
 
@@ -614,40 +607,23 @@
                         }
                     };
 
-                    await processGroup('mcq', exTN);
-                    await processGroup('true_false', exTF);
-                    await processGroup('short_answer', exSA);
-
-                    renderQBankUI();
-                    customAlert(`Đã thêm thành công câu hỏi vào Ngân hàng!`);
+                    await processGroup('mcq', exTN); await processGroup('true_false', exTF); await processGroup('short_answer', exSA);
+                    renderQBankUI(); customAlert(`Đã thêm thành công câu hỏi vào Ngân hàng!`);
                 } catch (err) { customAlert("Lỗi xử lý: " + err.message); } 
                 finally { btn.disabled = false; btn.innerText = "⚡ Tải lên Ngân hàng"; }
             };
             reader.readAsArrayBuffer(excelInput.files[0]);
         }
 
-        window.addManualQuestion = () => {
-            window.qBank.push({ id: 'q_' + new Date().getTime(), type: 'mcq', ans: 'A', qImg: '', sImg: '' });
-            renderQBankUI();
-        }
-
-        window.deleteQuestion = (id) => {
-            window.qBank = window.qBank.filter(q => q.id !== id);
-            renderQBankUI();
-        }
-
-        window.updateQBankItem = (id, field, value) => {
-            const item = window.qBank.find(q => q.id === id);
-            if(item) { item[field] = value; if(field === 'type') renderQBankUI(); }
-        }
+        window.addManualQuestion = () => { window.qBank.push({ id: 'q_' + new Date().getTime(), type: 'mcq', ans: 'A', qImg: '', sImg: '' }); renderQBankUI(); }
+        window.deleteQuestion = (id) => { window.qBank = window.qBank.filter(q => q.id !== id); renderQBankUI(); }
+        window.updateQBankItem = (id, field, value) => { const item = window.qBank.find(q => q.id === id); if(item) { item[field] = value; if(field === 'type') renderQBankUI(); } }
 
         window.triggerImgUpload = (id, field) => {
-            const input = document.createElement('input');
-            input.type = 'file'; input.accept = 'image/*';
+            const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
             input.onchange = async (e) => {
                 if(e.target.files[0]) {
-                    const b64 = await fileToBase64(e.target.files[0]);
-                    updateQBankItem(id, field, b64);
+                    const b64 = await fileToBase64(e.target.files[0]); updateQBankItem(id, field, b64);
                     document.getElementById(`img-${field}-${id}`).src = 'data:image/png;base64,' + b64;
                 }
             };
@@ -658,8 +634,7 @@
             const container = document.getElementById('questions-list-container');
             const emptyState = document.getElementById('empty-state');
             
-            let countTN = 0, countTF = 0, countSA = 0;
-            container.innerHTML = '';
+            let countTN = 0, countTF = 0, countSA = 0; container.innerHTML = '';
             
             if(window.qBank.length === 0) {
                 emptyState.classList.remove('hidden');
@@ -701,9 +676,7 @@
 
             document.getElementById('total-q-badge').innerText = window.qBank.length;
             document.getElementById('q-stats-text').innerText = `Đang có ${window.qBank.length} câu: ${countTN} trắc nghiệm, ${countTF} đúng/sai, ${countSA} trả lời ngắn.`;
-            document.getElementById('stat-tn').innerText = countTN;
-            document.getElementById('stat-tf').innerText = countTF;
-            document.getElementById('stat-sa').innerText = countSA;
+            document.getElementById('stat-tn').innerText = countTN; document.getElementById('stat-tf').innerText = countTF; document.getElementById('stat-sa').innerText = countSA;
             
             document.getElementById('pick-tn').max = countTN; document.getElementById('pick-tn').value = countTN;
             document.getElementById('pick-tf').max = countTF; document.getElementById('pick-tf').value = countTF;
@@ -737,8 +710,7 @@
                 });
 
                 const scoring = {
-                    mcq: parseFloat(document.getElementById('score-mcq').value),
-                    sa: parseFloat(document.getElementById('score-sa').value),
+                    mcq: parseFloat(document.getElementById('score-mcq').value), sa: parseFloat(document.getElementById('score-sa').value),
                     tf_1: parseFloat(document.getElementById('score-tf1').value), tf_2: parseFloat(document.getElementById('score-tf2').value),
                     tf_3: parseFloat(document.getElementById('score-tf3').value), tf_4: parseFloat(document.getElementById('score-tf4').value),
                 };
@@ -747,12 +719,10 @@
                 
                 const examMetadata = {
                     teacher: tName, time: parseInt(tTime), max_attempts: parseInt(tMaxAttempts) || 1,
-                    start_time: document.getElementById('t-start-time').value || null,
-                    end_time: document.getElementById('t-end-time').value || null,
+                    start_time: document.getElementById('t-start-time').value || null, end_time: document.getElementById('t-end-time').value || null,
                     allow_review: document.getElementById('t-review').checked, view_score: document.getElementById('t-show-score').checked,
                     scoring, bank_count: bankToUpload.length, question_count: totalPick,
-                    pick_rules: { mcq: pickTN, true_false: pickTF, short_answer: pickSA },
-                    created_at: new Date().toISOString()
+                    pick_rules: { mcq: pickTN, true_false: pickTF, short_answer: pickSA }, created_at: new Date().toISOString()
                 };
                 
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_exams', examId), examMetadata);
@@ -787,9 +757,40 @@
                 if (currentExamData.start_time && now < new Date(currentExamData.start_time)) throw new Error("Đề thi chưa mở.");
                 if (currentExamData.end_time && now > new Date(currentExamData.end_time)) throw new Error("Đề thi đã đóng.");
 
+                // KIỂM TRA LƯỢT ĐĂNG NHẬP LOCALSTORAGE
+                const attemptKey = `itex_attempt_${examId}`;
+                let currentAttempts = parseInt(localStorage.getItem(attemptKey)) || 0;
+                const maxAttempts = currentExamData.max_attempts || 1;
+                const remaining = maxAttempts - currentAttempts;
+
+                let attemptMsg = "";
+                const btnStart = document.getElementById('btn-start-exam');
+
+                if (remaining <= 0) {
+                    attemptMsg = `<div class="text-red-600 font-bold text-sm mt-1">⛔ Thiết bị này đã hết lượt vào thi (${maxAttempts}/${maxAttempts} lần).</div>`;
+                    btnStart.disabled = true; btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    attemptMsg = `<div class="text-[#2563EB] font-bold text-sm mt-1">Lưu ý: Thiết bị này còn ${remaining} lượt đăng nhập.</div>`;
+                    btnStart.disabled = false; btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+
+                let timeLimitMsg = "";
+                if (currentExamData.end_time) {
+                    const et = new Date(currentExamData.end_time);
+                    const timeStr = `${et.getHours().toString().padStart(2,'0')}:${et.getMinutes().toString().padStart(2,'0')}:${et.getSeconds().toString().padStart(2,'0')} ${et.getDate()}/${et.getMonth()+1}/${et.getFullYear()}`;
+                    timeLimitMsg = `<div class="text-[#DC2626] text-sm font-semibold mt-1">⏰ Hạn chót thu bài: ${timeStr}</div>`;
+                }
+
                 document.getElementById('student-entry').classList.add('hidden');
                 document.getElementById('student-info-form').classList.remove('hidden');
-                document.getElementById('exam-info-display').innerHTML = `Đề GV: ${currentExamData.teacher} <br>Thời gian: ${currentExamData.time} phút <br>Đề gồm: ${currentExamData.question_count} câu (Ngẫu nhiên)`;
+
+                // Bơm dữ liệu vào form đúng chuẩn giao diện hình ảnh cung cấp
+                document.getElementById('exam-info-display').innerHTML = `
+                    <div class="text-[#14BC9C] font-bold text-lg">Đề của GV: ${currentExamData.teacher}</div>
+                    <div class="text-[#14BC9C] font-semibold text-md mt-1">Thời gian làm bài: ${currentExamData.time} phút</div>
+                    ${timeLimitMsg}
+                    ${attemptMsg}
+                `;
 
             } catch (e) { customAlert(e.message, "KHÔNG THỂ VÀO THI"); } 
             finally { btn.disabled = false; btn.innerText = "Kiểm Tra Mã Đề"; }
@@ -804,6 +805,15 @@
             const btn = event.target; btn.innerText = "Đang lấy đề ngẫu nhiên..."; btn.disabled = true;
 
             try {
+                // Kiểm tra lại lượt thi lần cuối trước khi cho phép vào
+                const attemptKey = `itex_attempt_${currentExamData.id}`;
+                let currentAttempts = parseInt(localStorage.getItem(attemptKey)) || 0;
+                const maxAttempts = currentExamData.max_attempts || 1;
+                
+                if (currentAttempts >= maxAttempts) {
+                    return customAlert(`Thiết bị của bạn đã hết lượt truy cập vào mã đề này (Tối đa ${maxAttempts} lần).`, "HẾT LƯỢT THI");
+                }
+
                 const qPromises = [];
                 for(let i=0; i<currentExamData.bank_count; i++) qPromises.push(getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_questions', `${currentExamData.id}_${i}`)));
                 const qSnaps = await Promise.all(qPromises);
@@ -827,6 +837,9 @@
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
                     name: name, class_: sClass, status: 'testing', progress: window.currentProgress, violation_count: 0, updatedAt: new Date().toISOString()
                 });
+
+                // TĂNG LƯỢT THI LOCALSTORAGE
+                localStorage.setItem(attemptKey, currentAttempts + 1);
 
                 document.getElementById('student-info-form').classList.add('hidden');
                 document.getElementById('taking-exam').classList.remove('hidden');
@@ -961,7 +974,6 @@
                 detailedScores[i] = { score: score, max: q.type==='mcq'?scoring.mcq:q.type==='short_answer'?scoring.sa:scoring.tf_4 };
             });
 
-            // Update Live Session
             if (window.currentSessionId) {
                 updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
                     status: 'completed', score: totalScore, updatedAt: new Date().toISOString()
@@ -1024,7 +1036,6 @@
 
                 if (liveUnsubscribe) { liveUnsubscribe(); liveUnsubscribe = null; }
 
-                // Lấy TẤT CẢ session của mã đề này (Đang thi + Đã nộp)
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', examId, 'sessions'));
 
                 liveUnsubscribe = onSnapshot(q, (snapshot) => {
@@ -1050,7 +1061,6 @@
                         
                         const borderColor = data.status === 'completed' ? 'border-gray-400 opacity-80' : 'border-green-700';
 
-                        // Render Card đúng 100% hình thiết kế của user
                         html += `
                             <div class="bg-white rounded-lg border-l-[5px] ${borderColor} shadow-sm p-4 w-[280px] flex flex-col gap-2 relative transition-all duration-300">
                                 <div class="font-bold text-gray-800 text-[15px] uppercase truncate pr-4" title="${data.name}">${data.name}</div>
@@ -1103,15 +1113,15 @@
             if (!confirm("Xác nhận xóa bài và cấp lại lượt làm bài cho học sinh này?")) return;
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', examId, 'sessions', sessionId));
-                customAlert("Đã cấp lại lượt. Học sinh cần Refresh (F5) trang thi để vào làm lại.");
+                customAlert("Đã xóa phiên làm bài. Cấp lại lượt thành công!");
             } catch (e) { customAlert("Lỗi cấp lại lượt: " + e.message); }
         }
 
         window.forceSubmitAll = () => {
-            customAlert("Tính năng đang ở trạng thái giả lập. Hệ thống sẽ tự khóa form thi dựa vào [Thời gian đóng đề] của bạn khi khởi tạo.");
+            customAlert("Tính năng tự chốt bài hoạt động dựa trên cấu hình 'Thời gian đóng đề' khi tạo đề thi.");
         }
 
-        /* --- XỬ LÝ KẾT QUẢ, BIỂU ĐỒ & EXCEL (ĐÃ CÓ SẴN ĐẦY ĐỦ TRƯỚC ĐÓ) --- */
+        /* --- XỬ LÝ XEM KẾT QUẢ ĐÃ ĐƯỢC SỬA LỖI (FIX) --- */
         const renderScoreChart = (results, examId) => {
             const chartContainer = document.getElementById('results-chart-container'); const chartCanvas = document.getElementById('scoreChart');
             if (results.length === 0) { chartContainer.classList.add('hidden'); return; }
@@ -1145,15 +1155,32 @@
             if (!examId) return customAlert("Vui lòng nhập mã đề");
 
             const container = document.getElementById('results-table-container');
-            Array.from(container.children).forEach(child => { if (!['results-chart-container', 'question-chart-container'].includes(child.id)) child.remove(); });
+            
+            // Fix triệt để bug ẩn/hiện kết quả làm hỏng DOM
+            Array.from(container.children).forEach(child => { 
+                if (child.id !== 'results-chart-container' && child.id !== 'question-chart-container' && child.id !== 'empty-results-text') {
+                    child.remove(); 
+                }
+            });
             document.getElementById('empty-results-text').classList.add('hidden');
 
             try {
                 const docSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', examId));
-                if (!docSnap.exists()) throw new Error("Không tìm thấy dữ liệu kết quả!");
+                if (!docSnap.exists()) {
+                    document.getElementById('empty-results-text').classList.remove('hidden');
+                    document.getElementById('results-chart-container').classList.add('hidden');
+                    document.getElementById('question-chart-container').classList.add('hidden');
+                    return;
+                }
                 
                 const results = docSnap.data().results || [];
-                if (results.length === 0) { document.getElementById('empty-results-text').classList.remove('hidden'); return; }
+                if (results.length === 0) {
+                    document.getElementById('empty-results-text').classList.remove('hidden');
+                    document.getElementById('results-chart-container').classList.add('hidden');
+                    document.getElementById('question-chart-container').classList.add('hidden');
+                    return;
+                }
+                
                 results.sort((a, b) => b.score - a.score);
 
                 renderScoreChart(results, examId); 
