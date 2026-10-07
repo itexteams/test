@@ -417,6 +417,7 @@
         let violationCount = 0;
         let examStartTime = null;
         let isExamInProgress = false; 
+        let baseScreenHeight = 0;
 
         window.qBank = [];
         let liveUnsubscribe = null;
@@ -562,6 +563,51 @@
                 }
             }
         });
+
+        // --- CHỐNG CHIA ĐÔI MÀN HÌNH (SPLIT-SCREEN) --- //
+        // Bắt sự kiện Blur (Mất tiêu điểm khi chạm sang ứng dụng khác)
+        window.addEventListener('blur', () => {
+            if (isExamInProgress) {
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Bạn vừa thao tác sang một ứng dụng/cửa sổ khác! Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                if (window.currentSessionId && currentExamData) {
+                    updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                        violation_count: violationCount
+                    }).catch(()=>{});
+                }
+            }
+        });
+
+        // Bắt sự kiện Resize (Kiểm tra xem có bị thu nhỏ màn hình đột ngột không)
+        window.addEventListener('resize', () => {
+            if (!isExamInProgress) return;
+
+            const currentHeight = window.innerHeight;
+            const activeEl = document.activeElement;
+            
+            // Kiểm tra xem có đang gõ chữ làm bàn phím ảo bật lên không
+            const isKeyboardOpen = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+
+            if (!isKeyboardOpen) {
+                // Nếu màn hình bị hụt đi quá 30% so với ban đầu (bật chia đôi màn hình)
+                if (currentHeight < (baseScreenHeight * 0.7)) {
+                    violationCount++;
+                    document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                    customAlert(`Phát hiện thay đổi kích thước màn hình bất thường (Bật chế độ chia đôi màn hình). Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                    
+                    if (window.currentSessionId && currentExamData) {
+                        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                            violation_count: violationCount
+                        }).catch(()=>{});
+                    }
+                    baseScreenHeight = currentHeight; // Cập nhật lại để không báo liên tục
+                } else if (currentHeight > baseScreenHeight) {
+                    baseScreenHeight = currentHeight; // Cập nhật lại khi tắt chia đôi
+                }
+            }
+        });
+        // ---------------------------------------------- //
 
         window.fileToBase64 = (input) => {
             return new Promise((resolve, reject) => {
@@ -884,6 +930,9 @@
                 document.addEventListener("visibilitychange", handleVisibilityChange);
                 examStartTime = new Date(); 
                 isExamInProgress = true;
+
+                // Lưu kích thước màn hình chuẩn khi bắt đầu thi
+                baseScreenHeight = window.innerHeight;
 
                 renderStudentQuestions();
                 startTimer(currentExamData.time);
