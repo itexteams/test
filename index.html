@@ -417,7 +417,6 @@
         let violationCount = 0;
         let examStartTime = null;
         let isExamInProgress = false; 
-        let baseScreenHeight = window.innerHeight; // Lưu chiều cao lúc bắt đầu thi để chống chia màn hình
 
         window.qBank = [];
         let liveUnsubscribe = null;
@@ -436,17 +435,6 @@
                 if (typeof onClose === 'function') onClose();
             };
             modal.classList.remove('hidden');
-        };
-
-        const triggerViolation = (reasonMsg) => {
-            violationCount++;
-            document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
-            customAlert(`${reasonMsg} Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
-            if (window.currentSessionId && currentExamData) {
-                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
-                    violation_count: violationCount
-                }).catch(()=>{});
-            }
         };
 
         const isFirebaseConfigured = () => {
@@ -482,21 +470,29 @@
             window.customAlert("Ứng dụng chạy trong chế độ cục bộ hoặc thiếu cấu hình Firebase.", "LƯU Ý QUAN TRỌNG");
         }
 
-        // --- CƠ CHẾ CHỐNG GIAN LẬN --- //
+        // --- CƠ CHẾ CHỐNG GIAN LẬN: BACK TRANG / THOÁT TRANG --- //
         window.addEventListener('beforeunload', (e) => {
             if (isExamInProgress) { e.preventDefault(); e.returnValue = 'Bạn đang trong quá trình làm bài thi!'; return e.returnValue; }
         });
 
-        // 1. Chống vuốt Back trên mobile
+        // Chống vuốt Back trên mobile bằng cách hack history State
         window.history.pushState(null, null, window.location.href);
         window.onpopstate = function () {
             if (isExamInProgress) {
-                window.history.pushState(null, null, window.location.href);
-                triggerViolation("Hệ thống phát hiện hành vi vuốt/quay lại trang.");
+                window.history.pushState(null, null, window.location.href); // Đẩy lại để chặn việc back ra ngoài
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Hệ thống phát hiện hành vi vuốt/quay lại trang. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                
+                if (window.currentSessionId && currentExamData) {
+                    updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                        violation_count: violationCount
+                    }).catch(()=>{});
+                }
             }
         };
 
-        // 2. Chống Swipe to refresh
+        // Chống Swipe to refresh
         let lastTouchY = 0;
         document.addEventListener('touchstart', (e) => { if(e.touches.length > 0) lastTouchY = e.touches[0].clientY; }, {passive: true});
         document.addEventListener('touchmove', (e) => {
@@ -540,44 +536,29 @@
             else if (document.msExitFullscreen) document.msExitFullscreen();
         }
 
-        // 3. Bắt lỗi khi đang thi mà rời Tab
+        // Bắt lỗi khi đang thi mà rời Tab hoặc thoát Fullscreen
         const handleVisibilityChange = () => {
             if (document.hidden && isExamInProgress) {
-                triggerViolation("Hệ thống phát hiện bạn đã ẩn trình duyệt hoặc rời khỏi màn hình làm bài.");
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Hệ thống phát hiện bạn đã rời khỏi màn hình làm bài thi. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                if (window.currentSessionId && currentExamData) {
+                    updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                        violation_count: violationCount
+                    }).catch(()=>{});
+                }
             }
         }
         
-        // 4. Bắt lỗi thoát Fullscreen
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isExamInProgress) {
-                triggerViolation("Bạn vừa thoát chế độ Toàn màn hình!");
-            }
-        });
-
-        // 5. Bắt sự kiện Blur (Chạm sang ứng dụng khác khi đang chia đôi màn hình)
-        window.addEventListener('blur', () => {
-            if (isExamInProgress) {
-                triggerViolation("Bạn vừa thao tác sang một ứng dụng/cửa sổ khác!");
-            }
-        });
-
-        // 6. Bắt sự kiện Resize (Kiểm tra xem có bật chia đôi màn hình không)
-        window.addEventListener('resize', () => {
-            if (!isExamInProgress) return;
-
-            const currentHeight = window.innerHeight;
-            const activeEl = document.activeElement;
-            
-            // Kiểm tra xem học sinh có đang gõ chữ vào ô Input không
-            const isKeyboardOpen = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
-
-            if (!isKeyboardOpen) {
-                // Nếu chiều cao hụt đi quá 30% thì là chia màn hình
-                if (currentHeight < (baseScreenHeight * 0.7)) {
-                    triggerViolation("Phát hiện thay đổi kích thước màn hình bất thường (Bật chế độ chia đôi màn hình).");
-                    baseScreenHeight = currentHeight; 
-                } else if (currentHeight > baseScreenHeight) {
-                    baseScreenHeight = currentHeight;
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Bạn vừa thoát chế độ Toàn màn hình! Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                if (window.currentSessionId && currentExamData) {
+                    updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                        violation_count: violationCount
+                    }).catch(()=>{});
                 }
             }
         });
@@ -903,9 +884,6 @@
                 document.addEventListener("visibilitychange", handleVisibilityChange);
                 examStartTime = new Date(); 
                 isExamInProgress = true;
-                
-                // Lưu lại kích thước màn hình chuẩn lúc học sinh vừa vào thi
-                baseScreenHeight = window.innerHeight;
 
                 renderStudentQuestions();
                 startTimer(currentExamData.time);
