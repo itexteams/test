@@ -164,10 +164,11 @@
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Chế Độ Đồ Thị Bằng JavaScript)
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Chế Độ Đồ Thị OFFLINE)
                         </h3>
                         <p class="text-xs text-purple-700 mb-3">
-                            - <b>Tự động vẽ đồ thị Offline:</b> Không cần máy chủ ngoài. Nếu đồ thị vẫn không hiển thị, vui lòng dùng nút "Thêm Ảnh".
+                            - <b>KHÔNG CẦN MẠNG NGOÀI:</b> Hệ thống sẽ phân tích hàm số và tọa độ TikZ trực tiếp bằng JavaScript để vẽ đồ thị vector (SVG) ngay trên máy bạn.<br>
+                            - Siêu mượt, không bao giờ lo lỗi Server!
                         </p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
@@ -266,6 +267,7 @@
                 </div>
             </div>
 
+            <!-- Student View -->
             <div id="student-view" class="hidden max-w-3xl mx-auto space-y-6">
                 <div id="student-entry" class="card max-w-md mx-auto mt-10 p-8 shadow-lg border border-gray-100 rounded-xl">
                     <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Vào Thi</h2>
@@ -309,10 +311,13 @@
                 <div id="student-result" class="card hidden text-center">
                     <h2 class="text-3xl font-bold text-primary mb-2">🎉 Hoàn Thành!</h2>
                     <p class="text-gray-600 mb-6">Bạn đã nộp bài thành công.</p>
-                    <div id="score-display-box" class="bg-yellow-50 p-6 rounded-xl border-2 border-yellow-400 inline-block mb-8">
+                    
+                    <!-- SỬA LỖI Ở ĐÂY: Thêm 'hidden' mặc định vào khối điểm số -->
+                    <div id="score-display-box" class="hidden bg-yellow-50 p-6 rounded-xl border-2 border-yellow-400 inline-block mb-8">
                         <p class="text-sm text-gray-500 uppercase font-semibold">Tổng Điểm</p>
                         <p id="final-score" class="text-6xl font-extrabold text-gray-800 mt-2">0.00</p>
                     </div>
+                    
                     <div id="score-hidden-msg" class="hidden mb-8 p-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-200">
                         <p class="font-semibold">✅ Bài làm đã được ghi nhận.</p>
                         <p class="text-sm">Điểm số sẽ được giáo viên công bố sau.</p>
@@ -1038,7 +1043,6 @@
         window.addManualQuestion = () => { window.qBank.push({ id: 'q_' + new Date().getTime(), type: 'mcq', ans: 'A', qImg: '', sImg: '', isLatex: false }); renderQBankUI(); }
         window.deleteQuestion = (id) => { window.qBank = window.qBank.filter(q => q.id !== id); renderQBankUI(); }
         
-        // CHỐNG MẤT ĐÁP ÁN KHI SỬA THỦ CÔNG:
         window.updateQBankItem = (id, field, value) => { 
             const item = window.qBank.find(q => q.id === id); 
             if(item) { 
@@ -1175,7 +1179,6 @@
                 if (totalPick === 0) throw new Error("Tổng số câu bốc ra phải lớn hơn 0.");
                 if (window.qBank.length === 0) throw new Error("Ngân hàng câu hỏi đang trống.");
 
-                // LƯU ĐÁP ÁN MỘT CÁCH CHẶT CHẼ
                 const bankToUpload = window.qBank.map(q => {
                     if (!q.qImg && !q.isLatex) throw new Error("Có câu hỏi bị thiếu ảnh/nội dung đề bài!");
                     
@@ -1464,7 +1467,6 @@
             const questions = currentExamData.shuffledQuestions;
             const scoring = currentExamData.scoring || {};
             
-            // CHẤM ĐIỂM CHẶT CHẼ
             const s_mcq = parseFloat(scoring.mcq) || 0.25;
             const s_sa = parseFloat(scoring.sa) || 0.5;
             const s_tf1 = parseFloat(scoring.tf_1) || 0.1;
@@ -1504,7 +1506,7 @@
                 else if (q.type === 'true_false') {
                     uAns = []; 
                     let correctCount = 0;
-                    const validAnswers = q.answers || []; // Tránh lỗi undefined từ Server
+                    const validAnswers = q.answers || []; 
                     
                     for(let j=0; j<4; j++) {
                         const cb = document.getElementById(`tf-${i}-${j}`);
@@ -1555,10 +1557,15 @@
                 document.getElementById('taking-exam').classList.add('hidden');
                 document.getElementById('student-result').classList.remove('hidden');
                 
+                // KIỂM TRA ẨN ĐIỂM Ở ĐÂY
                 if (currentExamData.view_score !== false) {
                     document.getElementById('score-display-box').classList.remove('hidden'); 
+                    document.getElementById('score-hidden-msg').classList.add('hidden');
                     document.getElementById('final-score').innerText = totalScore.toFixed(2);
-                } else { document.getElementById('score-hidden-msg').classList.remove('hidden'); }
+                } else { 
+                    document.getElementById('score-display-box').classList.add('hidden'); 
+                    document.getElementById('score-hidden-msg').classList.remove('hidden'); 
+                }
                 
                 if (currentExamData.allow_review) {
                     const container = document.getElementById('review-questions'); document.getElementById('review-section').classList.remove('hidden');
