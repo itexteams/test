@@ -44,9 +44,11 @@
         .input-field { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; outline: none; transition: border-color 0.2s; }
         .input-field:focus { border-color: #14BC9C; ring: 2px solid #14BC9C; }
         .input-error { border-color: #ef4444; ring: 2px solid #ef4444; }
-        .option-btn { width: 100%; text-align: left; padding: 1rem; border: 2px solid #e5e7eb; border-radius: 0.5rem; transition: all 0.2s; font-weight: 500; }
-        .option-btn:hover:not(:disabled) { border-color: #14BC9C; background-color: #f0fdf4; }
-        .option-btn.selected { background-color: #FFD700; color: black; border-color: #b49700; font-weight: bold; }
+        
+        .option-btn { width: 100%; text-align: left; padding: 1rem; border: 2px solid #e5e7eb; border-radius: 0.75rem; transition: all 0.2s; font-weight: 500; background: white; cursor: pointer; }
+        .option-btn:hover:not(:disabled) { border-color: #14BC9C; background-color: #f0fdf4; box-shadow: 0 4px 6px -1px rgba(20, 188, 156, 0.1); }
+        .option-btn.selected { background-color: #FFD700; color: black; border-color: #b49700; font-weight: bold; box-shadow: 0 4px 6px -1px rgba(255, 215, 0, 0.2); }
+        
         .fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         #unanswered-tracker { transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.05); }
@@ -160,12 +162,11 @@
                         <p class="text-xs text-green-700 mt-2 italic">* Đề của mỗi học sinh sẽ được bốc ngẫu nhiên từ nhóm tương ứng trong Ngân hàng câu hỏi bên dưới.</p>
                     </div>
                     
-                    <!-- Nhập câu hỏi bằng LaTeX -->
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Copy câu hỏi tạo ra từ phần mềm iTeX cho vào đây
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Đã Hỗ Trợ Đưa Trực Tiếp Phương Án Vào Nút Bấm)
                         </h3>
-                        <p class="text-xs text-purple-700 mb-3">Hỗ trợ nhận diện các dạng câu và tự động vẽ Bảng Biến Thiên bằng HTML/SVG siêu nét nếu dùng tkzTabInit.</p>
+                        <p class="text-xs text-purple-700 mb-3">Hỗ trợ tự vẽ Bảng Biến Thiên (tkzTab) và dàn trang trắc nghiệm thông minh.</p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
                             <button onclick="processLatexEntry(this)" class="btn bg-purple-600 hover:bg-purple-700 shadow-md">✍️ Phân Tích & Thêm Vào Ngân Hàng</button>
@@ -383,8 +384,6 @@
         let liveUnsubscribe = null;
         window.currentSessionId = null;
         window.currentProgress = [];
-        window.tableZoomLevel = 1.0;
-        window.liveTrackingZoomLevel = 1.0;
         
         window.customAlert = (message, title = "Thông Báo", onClose = null) => {
             document.getElementById('modal-title').innerText = title;
@@ -427,7 +426,6 @@
             window.customAlert("Ứng dụng chạy trong chế độ cục bộ hoặc thiếu cấu hình Firebase.", "LƯU Ý QUAN TRỌNG");
         }
 
-        /* ----- CHỐNG GIAN LẬN ----- */
         window.addEventListener('beforeunload', (e) => {
             if (isExamInProgress) { e.preventDefault(); e.returnValue = 'Bạn đang trong quá trình làm bài thi!'; return e.returnValue; }
         });
@@ -529,7 +527,7 @@
             });
         }
 
-        /* ----- HỖ TRỢ LATEX PARSER & TKZ-TAB (BẢNG BIẾN THIÊN) ----- */
+        /* ----- HỖ TRỢ LATEX PARSER & TKZ-TAB ----- */
         
         window.extractBalanced = (str, keyword) => {
             const idx = str.indexOf(keyword);
@@ -586,7 +584,6 @@
             return options;
         };
 
-        // JS TRÌNH BIÊN DỊCH BẢNG BIẾN THIÊN (tkz-tab to HTML)
         const parseTkzTabToHTML = (tikzStr) => {
             try {
                 const initMatch = tikzStr.match(/\\tkzTabInit(?:\[[^\]]*\])?\s*\{((?:[^{}]|\{[^{}]*\})*)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}/);
@@ -700,12 +697,9 @@
 
         const formatLatexMath = (text) => {
             if (!text) return '';
-            
-            // Xử lý bắt các Bảng biến thiên TikZ và dịch nó ra HTML
             text = text.replace(/\\begin\{tikzpicture\}[\s\S]*?\\tkzTabInit[\s\S]*?\\end\{tikzpicture\}/g, (match) => {
                 return parseTkzTabToHTML(match);
             });
-
             return text
                 .replace(/\\begin\{center\}/g, '<div class="text-center w-full flex justify-center">')
                 .replace(/\\end\{center\}/g, '</div>')
@@ -719,6 +713,7 @@
 
         const parseSingleLatexQuestion = (block) => {
             let type = 'mcq', ans = '', qText = '', sText = '';
+            let parsedOptions = []; 
 
             const loigiaiMatch = window.extractBalanced(block, '\\loigiai');
             if (loigiaiMatch) {
@@ -733,10 +728,8 @@
                 const options = parseOptions(block, '\\choiceTFn');
                 let tfAns = '';
                 options.forEach((opt, idx) => {
-                    if (opt.includes('\\True')) tfAns += 'Đ';
-                    else tfAns += 'S';
-                    let cleanOpt = opt.replace('\\True', '').trim();
-                    qText += `<div class="mt-2"><b>Ý ${['a','b','c','d'][idx]}:</b> ${cleanOpt}</div>`;
+                    if (opt.includes('\\True')) tfAns += 'Đ'; else tfAns += 'S';
+                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim())); 
                 });
                 ans = tfAns;
             } else if (block.includes('\\shortans')) {
@@ -754,8 +747,7 @@
                 options.forEach((opt, idx) => {
                     let letter = ['A','B','C','D'][idx];
                     if (opt.includes('\\True')) ans = letter;
-                    let cleanOpt = opt.replace('\\True', '').trim();
-                    qText += `<div class="mt-2"><b>${letter}.</b> ${cleanOpt}</div>`;
+                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim())); 
                 });
             } else {
                 type = 'short_answer';
@@ -763,7 +755,7 @@
             }
 
             qText = qText.replace(/\\begin\{ex\}/g, '').replace(/\\end\{ex\}/g, '').trim();
-            return { type, ans, qText: formatLatexMath(qText), sText: formatLatexMath(sText), isLatex: true };
+            return { type, ans, qText: formatLatexMath(qText), sText: formatLatexMath(sText), options: parsedOptions, isLatex: true };
         };
 
         window.processLatexEntry = (btn) => {
@@ -779,7 +771,7 @@
                     if (qObj) {
                         window.qBank.push({
                             id: 'q_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2,5),
-                            type: qObj.type, ans: qObj.ans, qText: qObj.qText, sText: qObj.sText, qImg: '', sImg: '', isLatex: true
+                            type: qObj.type, ans: qObj.ans, qText: qObj.qText, sText: qObj.sText, options: qObj.options, qImg: '', sImg: '', isLatex: true
                         });
                         count++;
                     }
@@ -892,9 +884,18 @@
                     
                     let mediaHTML = '';
                     if (q.isLatex) {
+                        let optionsPreview = '';
+                        if (q.options && q.options.length > 0) {
+                            if (q.type === 'mcq') {
+                                optionsPreview = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">${['A','B','C','D'][idx]}.</b><span class="latex-content">${opt}</span></div>`).join('')}</div>`;
+                            } else if (q.type === 'true_false') {
+                                optionsPreview = `<div class="grid grid-cols-1 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">Ý ${['a','b','c','d'][idx]}:</b><span class="latex-content">${opt}</span></div>`).join('')}</div>`;
+                            }
+                        }
+
                         mediaHTML = `
                             <div class="w-full lg:flex-1 flex flex-col gap-2">
-                                <div class="text-sm text-gray-800 overflow-y-auto max-h-48 p-3 w-full latex-content border bg-gray-50 rounded">${q.qText}</div>
+                                <div class="text-sm text-gray-800 overflow-y-auto max-h-64 p-4 w-full latex-content border bg-gray-50 rounded">${q.qText}${optionsPreview}</div>
                                 <div class="text-sm text-gray-800 overflow-y-auto max-h-32 p-3 w-full latex-content border bg-green-50 rounded"><b>Lời giải: </b>${q.sText || 'Không có lời giải'}</div>
                             </div>
                         `;
@@ -970,7 +971,7 @@
                     let answerData = {};
                     if(q.type === 'mcq' || q.type === 'short_answer') answerData = { answer: q.ans };
                     else if(q.type === 'true_false') answerData = { answers: q.ans.split('') };
-                    return { type: q.type, img_data: q.qImg || '', da_img_data: q.sImg || '', is_latex: q.isLatex || false, q_text: q.qText || '', s_text: q.sText || '', ...answerData };
+                    return { type: q.type, img_data: q.qImg || '', da_img_data: q.sImg || '', is_latex: q.isLatex || false, q_text: q.qText || '', s_text: q.sText || '', q_options: q.options || [], ...answerData };
                 });
 
                 const scoring = {
@@ -1128,23 +1129,33 @@
             currentExamData.shuffledQuestions.forEach((q, i) => {
                 let inputHtml = '';
                 if (q.type === 'mcq') {
-                    inputHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">${['A','B','C','D'].map(opt => `<button onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn text-center">${opt}</button>`).join('')}</div><input type="hidden" id="ans-${i}">`;
+                    if (q.is_latex && q.q_options && q.q_options.length > 0) {
+                        inputHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            ${['A','B','C','D'].map((opt, idx) => `<button onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn flex items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors text-left"><span class="font-bold mr-3 text-lg">${opt}.</span><span class="latex-content flex-grow text-gray-800">${q.q_options[idx] || ''}</span></button>`).join('')}
+                        </div><input type="hidden" id="ans-${i}">`;
+                    } else {
+                        inputHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">${['A','B','C','D'].map(opt => `<button onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn text-center justify-center flex font-bold text-lg p-4">${opt}</button>`).join('')}</div><input type="hidden" id="ans-${i}">`;
+                    }
                 } else if (q.type === 'short_answer') {
-                    inputHtml = `<div class="mt-4"><input type="text" id="ans-${i}" class="input-field" placeholder="Nhập đáp án..." oninput="checkSAProgress(${i}, this)"></div>`;
+                    inputHtml = `<div class="mt-4"><input type="text" id="ans-${i}" class="input-field py-4 text-center text-lg font-bold" placeholder="Nhập đáp án của bạn..." oninput="checkSAProgress(${i}, this)"></div>`;
                 } else if (q.type === 'true_false') {
-                    inputHtml = `<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-3 rounded bg-gray-50 hover:bg-gray-100 cursor-pointer" onclick="document.getElementById('tf-${i}-${j}').click()"><span class="font-bold text-sm uppercase">Ý ${label}</span><label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-5 h-5 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-2">Đúng</span></label></div>`).join('')}</div>`;
+                    if (q.is_latex && q.q_options && q.q_options.length > 0) {
+                        inputHtml = `<div class="mt-4 grid grid-cols-1 gap-3">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-white hover:bg-gray-50 cursor-pointer shadow-sm transition-colors" onclick="document.getElementById('tf-${i}-${j}').click()"><div class="flex items-start mr-4"><span class="font-bold text-gray-700 mr-3 whitespace-nowrap">Ý ${label}:</span><span class="latex-content text-gray-800">${q.q_options[j] || ''}</span></div><label class="inline-flex items-center cursor-pointer flex-shrink-0"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg text-gray-700">Đúng</span></label></div>`).join('')}</div>`;
+                    } else {
+                        inputHtml = `<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer shadow-sm" onclick="document.getElementById('tf-${i}-${j}').click()"><span class="font-bold text-lg uppercase">Ý ${label}</span><label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg">Đúng</span></label></div>`).join('')}</div>`;
+                    }
                 }
 
                 let mediaHtml = '';
                 if (q.is_latex) {
-                    mediaHtml = `<div class="text-gray-800 text-lg mb-4 p-5 bg-blue-50/50 rounded-lg latex-content border border-blue-100 leading-relaxed shadow-sm flex flex-col items-center">${q.q_text}</div>`;
+                    mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-blue-50/50 rounded-xl latex-content border border-blue-100 leading-relaxed shadow-sm flex flex-col items-center">${q.q_text}</div>`;
                 } else {
-                    mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mb-4 w-full">`;
+                    mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mb-4 w-full shadow-sm">`;
                 }
 
                 const div = document.createElement('div');
                 div.className = "card transition-all duration-300"; div.id = `question-card-${i}`; 
-                div.innerHTML = `<div class="mb-4"><span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold uppercase mb-2 inline-block">${q.type === 'mcq' ? 'Trắc nghiệm' : q.type === 'true_false' ? 'Đúng/Sai' : 'Tự luận'}</span><h4 class="font-bold text-gray-800 text-lg">Câu ${i + 1}</h4></div>${mediaHtml}${inputHtml}`;
+                div.innerHTML = `<div class="mb-4"><span class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase mb-2 inline-block">${q.type === 'mcq' ? 'Trắc nghiệm' : q.type === 'true_false' ? 'Đúng/Sai' : 'Tự luận'}</span><h4 class="font-bold text-gray-800 text-xl">Câu ${i + 1}</h4></div>${mediaHtml}${inputHtml}`;
                 container.appendChild(div);
             });
 
@@ -1287,8 +1298,16 @@
                         
                         let mediaHtml = '';
                         if (q.is_latex) {
-                            mediaHtml = `<div class="text-gray-800 text-base mb-2 p-4 bg-white rounded latex-content border border-gray-200 flex flex-col items-center">${q.q_text}</div>`;
-                            if (q.s_text) mediaHtml += `<div class="text-gray-800 text-sm p-4 bg-green-50/50 rounded latex-content border border-green-200 mt-2"><b>Lời giải:</b><br>${q.s_text}</div>`;
+                            let optionsHtml = '';
+                            if (q.q_options && q.q_options.length > 0) {
+                                if (q.type === 'mcq') {
+                                    optionsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">${['A','B','C','D'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2">${opt}.</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
+                                } else if (q.type === 'true_false') {
+                                    optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
+                                }
+                            }
+                            mediaHtml = `<div class="text-gray-800 text-base mb-2 p-4 bg-white rounded latex-content border border-gray-200 flex flex-col items-center">${q.q_text}</div>${optionsHtml}`;
+                            if (q.s_text) mediaHtml += `<div class="text-gray-800 text-sm p-4 bg-green-50/50 rounded latex-content border border-green-200 mt-4"><b>Lời giải:</b><br>${q.s_text}</div>`;
                         } else {
                             mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-32 object-contain my-2">${q.da_img_data ? `<img src="data:image/png;base64,${q.da_img_data}" class="max-h-40 border rounded mt-1">` : ''}`;
                         }
