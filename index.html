@@ -64,7 +64,6 @@
         .highlight-question { animation: pulse-border 1.5s ease-out; }
         @keyframes pulse-border { 0% { box-shadow: 0 0 0 0 rgba(20, 188, 156, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(20, 188, 156, 0); } 100% { box-shadow: 0 0 0 0 rgba(20, 188, 156, 0); } }
 
-        /* Fix TikZ Jax rendering spacing */
         .tikz-render-container svg { max-width: 100%; height: auto; }
     </style>
 </head>
@@ -171,11 +170,11 @@
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Bản Nâng Cấp Tối Ưu)
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX
                         </h3>
                         <p class="text-xs text-purple-700 mb-3">
-                            - <b>Tự động dàn trang:</b> Các lệnh `\immini` được chia cột gọn gàng, chữ liền mạch.<br>
-                            - <b>Hiển thị đồ thị:</b> Tích hợp engine biên dịch TikZ bằng WebAssembly tự vẽ đồ thị cực nét.
+                            - <b>Hình ảnh:</b> Tự động dàn trang Hình xuống dưới Chữ để văn bản được tràn viền.<br>
+                            - <b>Mẹo nhỏ:</b> Nếu đồ thị TikZ bị lỗi không hiện, bạn có thể bấm nút "📷 Thêm Ảnh" ở danh sách câu hỏi bên dưới để tải ảnh chụp màn hình đồ thị lên bổ sung!
                         </p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
@@ -594,7 +593,6 @@
             return options;
         };
 
-        // Hàm bóc tách \scalebox để dọn dẹp lệnh trước khi ném vào TikZ Jax
         const removeScalebox = (text) => {
             let idx = text.indexOf('\\scalebox');
             while(idx !== -1) {
@@ -715,7 +713,7 @@
             text = text.replace(/\\end\{minipage\}/g, '');
             text = removeScalebox(text); 
 
-            // 2. Parse \immini - Biến thành 2 cột Flexbox tự động co giãn
+            // 2. Parse \immini - Tách Hình xuống dưới Chữ để văn bản được liền mạch
             let idx = text.indexOf('\\immini');
             while (idx !== -1) {
                 let start1 = text.indexOf('{', idx);
@@ -741,7 +739,8 @@
                     let imgPart = text.substring(start2 + 1, end2);
                     let fullMatch = text.substring(idx, end2 + 1);
                     
-                    let htmlStr = `<div class="flex flex-col md:flex-row gap-6 items-start my-3 w-full"><div class="flex-1 text-gray-800 text-justify leading-relaxed whitespace-normal break-words">${textPart}</div><div class="w-full md:w-auto min-w-[250px] flex justify-center items-center overflow-x-auto">${imgPart}</div></div>`;
+                    // Tách hình xuống dưới thay vì để bên cạnh
+                    let htmlStr = `<div class="flex flex-col gap-4 my-3 w-full"><div class="w-full text-gray-800 text-justify leading-relaxed whitespace-normal break-words">${textPart}</div><div class="w-full flex justify-center items-center overflow-x-auto">${imgPart}</div></div>`;
                     text = text.replace(fullMatch, htmlStr);
                 } else break;
                 idx = text.indexOf('\\immini');
@@ -752,7 +751,9 @@
                 if (match.includes('\\tkzTabInit')) {
                     return parseTkzTabToHTML(match);
                 } else {
-                    return `<div class="tikz-render-container flex justify-center my-3 overflow-x-auto w-full"><script type="text/tikz">${match}<\/script></div>`;
+                    // Chuyển mã TikZ thành Base64 để tránh lỗi thẻ HTML khi lưu
+                    const b64 = btoa(unescape(encodeURIComponent(match)));
+                    return `<div class="tikz-dynamic-container flex justify-center my-3 w-full overflow-x-auto" data-tikz="${b64}"></div>`;
                 }
             });
 
@@ -766,6 +767,20 @@
                 .replace(/\\hspace\*?\{.*?\}/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
                 .replace(/\\heva\{([\s\S]*?)\}/g, '\\begin{cases} $1 \\end{cases}')
                 .replace(/\\hoac\{([\s\S]*?)\}/g, '\\begin{bmatrix} $1 \\end{bmatrix}');
+        };
+
+        window.renderDynamicTikz = () => {
+            document.querySelectorAll('.tikz-dynamic-container').forEach(container => {
+                if (!container.hasChildNodes()) {
+                    try {
+                        const tikzCode = decodeURIComponent(escape(atob(container.getAttribute('data-tikz'))));
+                        const script = document.createElement('script');
+                        script.type = 'text/tikz';
+                        script.textContent = tikzCode;
+                        container.appendChild(script);
+                    } catch(e) { console.error("TikZ Decode Error", e); }
+                }
+            });
         };
 
         const parseSingleLatexQuestion = (block) => {
@@ -920,7 +935,9 @@
             input.onchange = async (e) => {
                 if(e.target.files[0]) {
                     const b64 = await fileToBase64(e.target.files[0]); updateQBankItem(id, field, b64);
-                    document.getElementById(`img-${field}-${id}`).src = 'data:image/png;base64,' + b64;
+                    const imgEl = document.getElementById(`img-${field}-${id}`);
+                    if(imgEl) { imgEl.src = 'data:image/png;base64,' + b64; imgEl.classList.remove('hidden'); }
+                    else { renderQBankUI(); } // Re-render if it was a latex question without existing image tag
                 }
             };
             input.click();
@@ -950,10 +967,22 @@
                             }
                         }
 
+                        let userUploadedImages = '';
+                        if (q.qImg) userUploadedImages += `<img id="img-qImg-${q.id}" src="data:image/png;base64,${q.qImg}" class="max-h-48 object-contain my-3 rounded border mx-auto shadow-sm">`;
+                        if (q.sImg) userUploadedImages += `<div class="mt-2 text-center"><b class="text-sm text-green-700">Ảnh lời giải bổ sung:</b><br><img id="img-sImg-${q.id}" src="data:image/png;base64,${q.sImg}" class="max-h-48 object-contain my-2 rounded border mx-auto shadow-sm"></div>`;
+
                         mediaHTML = `
                             <div class="w-full lg:flex-1 flex flex-col gap-2">
-                                <div class="text-sm text-gray-800 overflow-y-auto max-h-[400px] p-4 w-full latex-content border bg-gray-50 rounded">${q.qText}${optionsPreview}</div>
+                                <div class="text-sm text-gray-800 overflow-y-auto max-h-[500px] p-4 w-full latex-content border bg-gray-50 rounded">
+                                    ${q.qText}
+                                    ${userUploadedImages}
+                                    ${optionsPreview}
+                                </div>
                                 <div class="text-sm text-gray-800 overflow-y-auto max-h-32 p-3 w-full latex-content border bg-green-50 rounded"><b>Lời giải: </b>${q.sText || 'Không có lời giải'}</div>
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <button onclick="triggerImgUpload('${q.id}', 'qImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Thêm/Đổi Ảnh Đề Bài</button>
+                                    <button onclick="triggerImgUpload('${q.id}', 'sImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Thêm/Đổi Ảnh Lời Giải</button>
+                                </div>
                             </div>
                         `;
                     } else {
@@ -1002,7 +1031,10 @@
             document.getElementById('pick-tf').max = countTF; document.getElementById('pick-tf').value = countTF;
             document.getElementById('pick-sa').max = countSA; document.getElementById('pick-sa').value = countSA;
 
-            setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
+            setTimeout(() => { 
+                if (window.MathJax) MathJax.typesetPromise(); 
+                window.renderDynamicTikz();
+            }, 100);
         }
 
         window.saveExam = async (btnElement) => {
@@ -1205,7 +1237,9 @@
 
                 let mediaHtml = '';
                 if (q.is_latex) {
-                    mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-blue-50/50 rounded-xl latex-content border border-blue-100 leading-relaxed shadow-sm block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}</div>`;
+                    let fallbackImg = '';
+                    if (q.img_data) { fallbackImg = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mt-4 mx-auto shadow-sm w-full md:w-auto">`; }
+                    mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-blue-50/50 rounded-xl latex-content border border-blue-100 leading-relaxed shadow-sm block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}${fallbackImg}</div>`;
                 } else {
                     mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mb-4 w-full shadow-sm">`;
                 }
@@ -1216,7 +1250,10 @@
                 container.appendChild(div);
             });
 
-            setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
+            setTimeout(() => { 
+                if (window.MathJax) MathJax.typesetPromise(); 
+                window.renderDynamicTikz();
+            }, 100);
         }
 
         window.selectMCQ = (qIdx, opt) => {
@@ -1363,8 +1400,13 @@
                                     optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
                                 }
                             }
-                            mediaHtml = `<div class="text-gray-800 text-base mb-2 p-4 bg-white rounded latex-content border border-gray-200 block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}</div>${optionsHtml}`;
-                            if (q.s_text) mediaHtml += `<div class="text-gray-800 text-sm p-4 bg-green-50/50 rounded latex-content border border-green-200 mt-4"><b>Lời giải:</b><br>${q.s_text}</div>`;
+                            let fallbackImg = '';
+                            if (q.img_data) fallbackImg = `<img src="data:image/png;base64,${q.img_data}" class="max-h-48 object-contain mt-4 mx-auto rounded border shadow-sm w-full md:w-auto">`;
+                            let fallbackSImg = '';
+                            if (q.da_img_data) fallbackSImg = `<br><img src="data:image/png;base64,${q.da_img_data}" class="max-h-48 object-contain mt-2 mx-auto rounded border shadow-sm w-full md:w-auto">`;
+
+                            mediaHtml = `<div class="text-gray-800 text-base mb-2 p-4 bg-white rounded latex-content border border-gray-200 block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}${fallbackImg}</div>${optionsHtml}`;
+                            if (q.s_text || fallbackSImg) mediaHtml += `<div class="text-gray-800 text-sm p-4 bg-green-50/50 rounded latex-content border border-green-200 mt-4"><b>Lời giải:</b><br>${q.s_text}${fallbackSImg}</div>`;
                         } else {
                             mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-32 object-contain my-2">${q.da_img_data ? `<img src="data:image/png;base64,${q.da_img_data}" class="max-h-40 border rounded mt-1">` : ''}`;
                         }
@@ -1373,7 +1415,10 @@
                         container.appendChild(div);
                     });
                     
-                    setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
+                    setTimeout(() => { 
+                        if (window.MathJax) MathJax.typesetPromise(); 
+                        window.renderDynamicTikz();
+                    }, 100);
                 }
             } catch (e) { customAlert("Lỗi nộp bài: " + e.message); }
         }
