@@ -164,11 +164,10 @@
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Tự Động Biên Dịch TikZ)
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Máy Chủ Dịch TikZ Siêu Tốc)
                         </h3>
                         <p class="text-xs text-purple-700 mb-3">
-                            - Hệ thống sẽ <b>Tự động gửi mã TikZ lên máy chủ ảo</b>, vẽ thành ảnh cực nét và chèn tự động vào đề.<br>
-                            - Hỗ trợ hoàn hảo mọi loại đồ thị hàm số và hình học không gian phức tạp.
+                            - <b>Máy chủ mạnh mẽ:</b> Mọi đồ thị TikZ phức tạp sẽ được gửi đến máy chủ chuyên nghiệp biên dịch thành ảnh cực nét.<br>
                         </p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
@@ -267,7 +266,6 @@
                 </div>
             </div>
 
-            <!-- Student View -->
             <div id="student-view" class="hidden max-w-3xl mx-auto space-y-6">
                 <div id="student-entry" class="card max-w-md mx-auto mt-10 p-8 shadow-lg border border-gray-100 rounded-xl">
                     <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Vào Thi</h2>
@@ -530,7 +528,7 @@
             });
         }
 
-        /* ----- BIÊN DỊCH TIKZ SANG SVG/PNG QUA API ----- */
+        /* ----- BIÊN DỊCH TIKZ SANG ẢNH (QUICKLATEX API) ----- */
         
         window.extractBalanced = (str, keyword) => {
             const idx = str.indexOf(keyword);
@@ -740,8 +738,8 @@
                     const b64 = btoa(unescape(encodeURIComponent(match)));
                     return `<div id="${elementId}" class="tikz-pending border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl p-6 w-full max-w-md mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4" data-tikz="${b64}" data-qid="${qId}">
                                 <span class="text-4xl mb-3 animate-bounce">⏳</span>
-                                <span class="font-bold text-base mb-1 text-blue-600">Đang gửi yêu cầu biên dịch ảnh...</span>
-                                <span class="text-xs text-gray-500 px-4">Hệ thống đang tự động kết nối máy chủ để vẽ đồ thị TikZ cho bạn.</span>
+                                <span class="font-bold text-base mb-1 text-blue-600">Đang tự động vẽ đồ thị...</span>
+                                <span class="text-xs text-gray-500 px-4">Hệ thống đang kết nối máy chủ LaTeX để biên dịch hình ảnh này.</span>
                             </div>`;
                 }
             });
@@ -761,59 +759,59 @@
                 .replace(/\\hoac\{([\s\S]*?)\}/g, '\\begin{bmatrix} $1 \\end{bmatrix}');
         };
 
-        // Gửi API biên dịch Tikz sang rtex
+        // Gửi API biên dịch Tikz sang ảnh qua hệ thống mạnh mẽ QuickLaTeX
         window.compileTikzAsync = async (qId, elementId, tikzCode) => {
             const el = document.getElementById(elementId);
             if(!el) return;
 
-            const latexDoc = `\\documentclass[tikz,border=2mm]{standalone}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n${tikzCode}\n\\end{document}`;
-
             try {
+                // Khai báo preamble với đầy đủ các thư viện thường dùng ở VN
+                const preamble = `\\usepackage{amsmath}\n\\usepackage{amsfonts}\n\\usepackage{amssymb}\n\\usepackage{tikz}\n\\usepackage{pgfplots}\n\\pgfplotsset{compat=1.15}\n\\usetikzlibrary{calc,shapes,arrows,intersections,patterns}`;
+                
                 const formData = new URLSearchParams();
-                formData.append('code', latexDoc);
-                formData.append('format', 'png');
-                formData.append('density', '200');
+                formData.append('formula', tikzCode);
+                formData.append('fsize', '18px');
+                formData.append('fcolor', '000000');
+                formData.append('mode', '0');
+                formData.append('out', '1');
+                formData.append('remhost', 'quicklatex.com');
+                formData.append('preamble', preamble);
 
-                const res = await fetch('https://rtex.probablyaweb.site/api/v2', {
+                const res = await fetch('https://quicklatex.com/latex3.f', {
                     method: 'POST',
                     body: formData,
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
                 });
-                const data = await res.json();
-
-                if (data.status === 'success') {
-                    const imgUrl = `https://rtex.probablyaweb.site/api/v2/${data.filename}`;
+                
+                const text = await res.text();
+                const lines = text.split('\n');
+                
+                if (lines.length > 1 && lines[1].startsWith('http')) {
+                    // Cập nhật giao thức https để tránh Mixed Content
+                    const imgUrl = lines[1].replace('http://', 'https://');
                     
-                    // Fetch lấy blob ảnh và chuyển đổi sang Base64
-                    const imgRes = await fetch(imgUrl);
-                    const blob = await imgRes.blob();
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const b64 = reader.result;
-                        const imgHtml = `<div class="w-full flex justify-center my-3"><img src="${b64}" class="max-h-64 object-contain rounded border shadow-sm"></div>`;
-                        
-                        if (el) el.outerHTML = imgHtml;
+                    const imgHtml = `<div class="w-full flex justify-center my-3"><img src="${imgUrl}" class="max-h-64 object-contain rounded border shadow-sm"></div>`;
+                    
+                    if (el) el.outerHTML = imgHtml;
 
-                        // Lưu thay thế vào qBank để khi lưu không bị mất
-                        const q = window.qBank.find(x => x.id === qId);
-                        if (q) {
-                            const regex = new RegExp(`<div id="${elementId}"[^>]*>.*?</div>`, 'gs');
-                            q.qText = q.qText.replace(regex, imgHtml);
-                            q.sText = q.sText.replace(regex, imgHtml);
-                            q.options = q.options.map(opt => opt.replace(regex, imgHtml));
-                        }
-                    };
-                    reader.readAsDataURL(blob);
-                } else { throw new Error("Lỗi API rtex"); }
+                    // Lưu thay thế vào qBank
+                    const q = window.qBank.find(x => x.id === qId);
+                    if (q) {
+                        const regex = new RegExp(`<div id="${elementId}"[^>]*>.*?</div>`, 'gs');
+                        q.qText = q.qText.replace(regex, imgHtml);
+                        if(q.sText) q.sText = q.sText.replace(regex, imgHtml);
+                        if(q.options) q.options = q.options.map(opt => opt.replace(regex, imgHtml));
+                    }
+                } else { throw new Error("Server QuickLaTeX từ chối mã (Lỗi Cú Pháp)"); }
             } catch(e) {
                 console.error("TikZ Compile Error:", e);
                 if(el) {
                     el.innerHTML = `
                         <span class="text-3xl mb-2">⚠️</span>
                         <span class="font-bold text-base mb-1 text-red-600">Lỗi Biên Dịch Đồ Thị</span>
-                        <span class="text-xs text-gray-500 px-4">Mã TikZ phức tạp hoặc máy chủ quá tải. Vui lòng chụp màn hình đồ thị và dùng nút <b>📷 Thêm Ảnh</b> để chèn thủ công.</span>
+                        <span class="text-xs text-gray-500 px-4">Mã TikZ có lỗi cú pháp hoặc sử dụng thư viện chưa được máy chủ hỗ trợ. Vui lòng chụp màn hình và chèn thủ công.</span>
                     `;
-                    el.classList.remove('tikz-pending'); // Tránh lặp vô tận
+                    el.classList.remove('tikz-pending'); // Ngăn lặp lại
                 }
             }
         };
