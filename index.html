@@ -164,10 +164,11 @@
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Máy Chủ Dịch TikZ Siêu Tốc)
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Chế Độ Đồ Thị OFFLINE)
                         </h3>
                         <p class="text-xs text-purple-700 mb-3">
-                            - <b>Máy chủ mạnh mẽ:</b> Mọi đồ thị TikZ phức tạp sẽ được gửi đến máy chủ chuyên nghiệp biên dịch thành ảnh cực nét.<br>
+                            - <b>KHÔNG CẦN MẠNG NGOÀI:</b> Hệ thống sẽ phân tích hàm số và tọa độ TikZ trực tiếp bằng JavaScript để vẽ đồ thị vector (SVG) ngay trên máy bạn.<br>
+                            - Siêu mượt, không bao giờ lo lỗi Server!
                         </p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
@@ -528,7 +529,7 @@
             });
         }
 
-        /* ----- BIÊN DỊCH TIKZ SANG ẢNH (QUICKLATEX API) ----- */
+        /* ----- HỖ TRỢ LATEX PARSER & TKZ-TAB & ĐỒ THỊ TIKZ (JS RENDERER) ----- */
         
         window.extractBalanced = (str, keyword) => {
             const idx = str.indexOf(keyword);
@@ -686,6 +687,142 @@
             }
         };
 
+        // BỘ CÔNG CỤ VẼ ĐỒ THỊ BẰNG THUẦN JAVASCRIPT
+        const parseTikZGraphToSVG = (tikzStr) => {
+            try {
+                let xMin = -4, xMax = 4, yMin = -4, yMax = 4;
+                const clipMatch = tikzStr.match(/\\clip\s*\(([^,]+),([^)]+)\)\s*rectangle\s*\(([^,]+),([^)]+)\)/);
+                if (clipMatch) {
+                    xMin = parseFloat(clipMatch[1]); yMin = parseFloat(clipMatch[2]);
+                    xMax = parseFloat(clipMatch[3]); yMax = parseFloat(clipMatch[4]);
+                } else {
+                    const axesRegex = /\\draw\[->\]\s*\(([^,]+),([^)]+)\)\s*--\s*\(([^,]+),([^)]+)\)/g;
+                    let m;
+                    while((m = axesRegex.exec(tikzStr))) {
+                        let v1 = parseFloat(m[1]), v2 = parseFloat(m[2]), v3 = parseFloat(m[3]), v4 = parseFloat(m[4]);
+                        if (v2 === 0 && v4 === 0) { xMin = v1; xMax = v3; }
+                        if (v1 === 0 && v3 === 0) { yMin = v2; yMax = v4; }
+                    }
+                }
+                
+                let pX = (xMax - xMin) * 0.05 || 0.5; 
+                let pY = (yMax - yMin) * 0.05 || 0.5;
+                xMin -= pX; xMax += pX; yMin -= pY; yMax += pY;
+
+                const W = 350, H = 300;
+                const mapX = (x) => ((x - xMin) / (xMax - xMin)) * W;
+                const mapY = (y) => H - ((y - yMin) / (yMax - yMin)) * H;
+
+                let svg = `<div class="w-full flex justify-center my-4"><svg viewBox="0 0 ${W} ${H}" class="max-w-[350px] w-full h-auto bg-white rounded-lg p-2 font-math" style="overflow: visible;">`;
+                svg += `<defs><marker id="arrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>`;
+
+                const cleanVal = (v) => {
+                    v = v.trim();
+                    if(v.includes('pt')) return parseFloat(v.replace('pt','')) * 0.05; 
+                    try { return new Function('return ' + v.replace(/\\pi/g, 'Math.PI'))(); } catch(e){ return parseFloat(v); }
+                };
+
+                let expandedTikz = tikzStr;
+                const foreachRegex = /\\foreach\s+\\([a-zA-Z]+)\/\\([a-zA-Z]+)\s+in\s+\{([^}]+)\}\s*([^{;]+;)/g;
+                expandedTikz = expandedTikz.replace(foreachRegex, (match, var1, var2, list, cmd) => {
+                    let res = '';
+                    list.split(',').forEach(pair => {
+                        const parts = pair.split('/');
+                        if(parts.length===2) res += cmd.replace(new RegExp('\\\\'+var1, 'g'), parts[0]).replace(new RegExp('\\\\'+var2, 'g'), parts[1]) + ' ';
+                    }); return res;
+                });
+                const foreachRegex2 = /\\foreach\s+\\([a-zA-Z]+)\s+in\s+\{([^}]+)\}\s*([^{;]+;)/g;
+                expandedTikz = expandedTikz.replace(foreachRegex2, (match, var1, list, cmd) => {
+                    let res = '';
+                    list.split(',').forEach(v1 => res += cmd.replace(new RegExp('\\\\'+var1, 'g'), v1) + ' ');
+                    return res;
+                });
+
+                let svgLines = '';
+                let svgNodes = '';
+
+                const commands = expandedTikz.split(';');
+                commands.forEach(cmd => {
+                    cmd = cmd.trim();
+                    if (!cmd || cmd.startsWith('%') || cmd.startsWith('\\clip') || cmd.startsWith('\\begin') || cmd.startsWith('\\end')) return;
+
+                    if (cmd.includes('plot')) {
+                        let domainMatch = cmd.match(/domain=(-?[\d.]+):(-?[\d.]+)/);
+                        let dMin = xMin, dMax = xMax;
+                        if(domainMatch) { dMin = parseFloat(domainMatch[1]); dMax = parseFloat(domainMatch[2]); }
+                        
+                        let plotMatch = cmd.match(/plot\s*\(\s*\\x\s*,\s*\{([^}]+)\}\s*\)/);
+                        if(plotMatch) {
+                            let expr = plotMatch[1];
+                            expr = expr.replace(/\\x/g, '(x)').replace(/\^/g, '**').replace(/sin\(/g, 'Math.sin(').replace(/cos\(/g, 'Math.cos(').replace(/tan\(/g, 'Math.tan(');
+                            
+                            let pathD = '';
+                            let steps = 150;
+                            let isDrawing = false;
+                            
+                            for(let i=0; i<=steps; i++) {
+                                let x = dMin + (dMax - dMin) * (i/steps);
+                                try {
+                                    let y = new Function('x', 'return ' + expr)(x);
+                                    if(y >= yMin - 1 && y <= yMax + 1) { 
+                                        pathD += (isDrawing ? 'L ' : 'M ') + mapX(x) + ' ' + mapY(y) + ' ';
+                                        isDrawing = true;
+                                    } else {
+                                        isDrawing = false;
+                                    }
+                                } catch(err){}
+                            }
+                            if(pathD) svgLines += `<path d="${pathD}" fill="none" stroke="#1f2937" stroke-width="1.8" stroke-linejoin="round"/>`;
+                        }
+                    } else if (cmd.includes('\\draw')) {
+                        const isDashed = cmd.includes('dashed');
+                        const hasArrow = cmd.includes('->');
+                        
+                        const coords = [...cmd.matchAll(/\(([^,]+),([^)]+)\)/g)];
+                        if(coords.length > 0) {
+                            let pathD = '';
+                            coords.forEach((c, i) => {
+                                let x = cleanVal(c[1]); let y = cleanVal(c[2]);
+                                pathD += (i===0 ? 'M ' : 'L ') + mapX(x) + ' ' + mapY(y) + ' ';
+                            });
+                            let style = `fill="none" stroke="#4b5563" stroke-width="1"`;
+                            if(isDashed) style += ` stroke-dasharray="4,4" opacity="0.7" stroke-width="1.2"`;
+                            if(hasArrow) style += ` marker-end="url(#arrowHead)" stroke-width="1.2" stroke="#1f2937"`;
+                            svgLines += `<path d="${pathD}" ${style} />`;
+                        }
+
+                        const nodeMatch = cmd.match(/node\s*(?:\[([^\]]*)\])?\s*\{([^}]+)\}/);
+                        if (nodeMatch && coords.length > 0) {
+                            let lastCoord = coords[coords.length-1];
+                            let x = mapX(cleanVal(lastCoord[1])); let y = mapY(cleanVal(lastCoord[2]));
+                            let pos = nodeMatch[1] || ''; let text = nodeMatch[2].replace(/\$/g,'');
+                            
+                            let tx = x, ty = y;
+                            if(pos.includes('below')) ty += 14;
+                            if(pos.includes('above')) ty -= 14;
+                            if(pos.includes('left')) tx -= 14;
+                            if(pos.includes('right')) tx += 14;
+                            
+                            svgNodes += `<text x="${tx}" y="${ty}" font-family="Times New Roman, serif" font-size="15" font-style="italic" fill="#000" text-anchor="middle" dominant-baseline="middle">${text}</text>`;
+                        }
+                    } else if (cmd.includes('\\node')) {
+                         const nodeMatch = cmd.match(/\\node\s*(?:\[([^\]]*)\])?\s*at\s*\(([^,]+),([^)]+)\)\s*\{([^}]+)\}/);
+                         if (nodeMatch) {
+                             let x = mapX(cleanVal(nodeMatch[2])); let y = mapY(cleanVal(nodeMatch[3]));
+                             let text = nodeMatch[4].replace(/\$/g,'');
+                             svgNodes += `<text x="${x}" y="${y}" font-family="Times New Roman, serif" font-size="15" font-style="italic" fill="#000" text-anchor="middle" dominant-baseline="middle">${text}</text>`;
+                         }
+                    }
+                });
+
+                svg += svgLines + svgNodes + `</svg></div>`;
+                return svg;
+            } catch(err) {
+                console.error("Custom TikZ Parser Error:", err);
+                return null; 
+            }
+        };
+
         const formatLatexMath = (text, qId) => {
             if (!text) return '';
 
@@ -727,20 +864,17 @@
                 idx = text.indexOf('\\immini');
             }
 
-            // 3. Xử lý TikZ
-            let tikzCounter = 0;
+            // 3. Xử lý TikZ Bằng Trình Duyệt JS Mới
             text = text.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/g, (match) => {
                 if (match.includes('\\tkzTabInit') || match.includes('\\tkzTabLine')) {
                     return parseTkzTabToHTML(match);
                 } else {
-                    tikzCounter++;
-                    const elementId = `tikz-${qId}-${tikzCounter}`;
-                    const b64 = btoa(unescape(encodeURIComponent(match)));
-                    return `<div id="${elementId}" class="tikz-pending border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl p-6 w-full max-w-md mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4" data-tikz="${b64}" data-qid="${qId}">
-                                <span class="text-4xl mb-3 animate-bounce">⏳</span>
-                                <span class="font-bold text-base mb-1 text-blue-600">Đang tự động vẽ đồ thị...</span>
-                                <span class="text-xs text-gray-500 px-4">Hệ thống đang kết nối máy chủ LaTeX để biên dịch hình ảnh này.</span>
-                            </div>`;
+                    const svgGraph = parseTikZGraphToSVG(match);
+                    if (svgGraph) {
+                        return svgGraph;
+                    } else {
+                        return `<div class="border-2 border-dashed border-blue-300 bg-blue-50 text-blue-600 rounded-xl p-4 w-full max-w-sm mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4"><span class="text-3xl mb-2">🖼️</span><span class="text-xs font-bold px-2">Đồ thị quá dị thường. Vui lòng dùng nút <b>📷 Thêm Ảnh</b> để chèn lại.</span></div>`;
+                    }
                 }
             });
             
@@ -757,72 +891,6 @@
                 .replace(/\\hspace\*?\{.*?\}/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
                 .replace(/\\heva\{([\s\S]*?)\}/g, '\\begin{cases} $1 \\end{cases}')
                 .replace(/\\hoac\{([\s\S]*?)\}/g, '\\begin{bmatrix} $1 \\end{bmatrix}');
-        };
-
-        // Gửi API biên dịch Tikz sang ảnh qua hệ thống mạnh mẽ QuickLaTeX
-        window.compileTikzAsync = async (qId, elementId, tikzCode) => {
-            const el = document.getElementById(elementId);
-            if(!el) return;
-
-            try {
-                // Khai báo preamble với đầy đủ các thư viện thường dùng ở VN
-                const preamble = `\\usepackage{amsmath}\n\\usepackage{amsfonts}\n\\usepackage{amssymb}\n\\usepackage{tikz}\n\\usepackage{pgfplots}\n\\pgfplotsset{compat=1.15}\n\\usetikzlibrary{calc,shapes,arrows,intersections,patterns}`;
-                
-                const formData = new URLSearchParams();
-                formData.append('formula', tikzCode);
-                formData.append('fsize', '18px');
-                formData.append('fcolor', '000000');
-                formData.append('mode', '0');
-                formData.append('out', '1');
-                formData.append('remhost', 'quicklatex.com');
-                formData.append('preamble', preamble);
-
-                const res = await fetch('https://quicklatex.com/latex3.f', {
-                    method: 'POST',
-                    body: formData,
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                });
-                
-                const text = await res.text();
-                const lines = text.split('\n');
-                
-                if (lines.length > 1 && lines[1].startsWith('http')) {
-                    // Cập nhật giao thức https để tránh Mixed Content
-                    const imgUrl = lines[1].replace('http://', 'https://');
-                    
-                    const imgHtml = `<div class="w-full flex justify-center my-3"><img src="${imgUrl}" class="max-h-64 object-contain rounded border shadow-sm"></div>`;
-                    
-                    if (el) el.outerHTML = imgHtml;
-
-                    // Lưu thay thế vào qBank
-                    const q = window.qBank.find(x => x.id === qId);
-                    if (q) {
-                        const regex = new RegExp(`<div id="${elementId}"[^>]*>.*?</div>`, 'gs');
-                        q.qText = q.qText.replace(regex, imgHtml);
-                        if(q.sText) q.sText = q.sText.replace(regex, imgHtml);
-                        if(q.options) q.options = q.options.map(opt => opt.replace(regex, imgHtml));
-                    }
-                } else { throw new Error("Server QuickLaTeX từ chối mã (Lỗi Cú Pháp)"); }
-            } catch(e) {
-                console.error("TikZ Compile Error:", e);
-                if(el) {
-                    el.innerHTML = `
-                        <span class="text-3xl mb-2">⚠️</span>
-                        <span class="font-bold text-base mb-1 text-red-600">Lỗi Biên Dịch Đồ Thị</span>
-                        <span class="text-xs text-gray-500 px-4">Mã TikZ có lỗi cú pháp hoặc sử dụng thư viện chưa được máy chủ hỗ trợ. Vui lòng chụp màn hình và chèn thủ công.</span>
-                    `;
-                    el.classList.remove('tikz-pending'); // Ngăn lặp lại
-                }
-            }
-        };
-
-        window.processPendingTikz = () => {
-            document.querySelectorAll('.tikz-pending').forEach(el => {
-                const qId = el.getAttribute('data-qid');
-                const elementId = el.id;
-                const tikzCode = decodeURIComponent(escape(atob(el.getAttribute('data-tikz'))));
-                window.compileTikzAsync(qId, elementId, tikzCode);
-            });
         };
 
         const parseSingleLatexQuestion = (block, qId) => {
@@ -1080,10 +1148,7 @@
             document.getElementById('pick-tf').max = countTF; document.getElementById('pick-tf').value = countTF;
             document.getElementById('pick-sa').max = countSA; document.getElementById('pick-sa').value = countSA;
 
-            setTimeout(() => { 
-                if (window.MathJax) MathJax.typesetPromise(); 
-                window.processPendingTikz(); 
-            }, 100);
+            setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
         }
 
         window.saveExam = async (btnElement) => {
