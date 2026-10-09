@@ -164,11 +164,11 @@
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Đã Tối Ưu Đồ Thị)
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Tự Động Biên Dịch TikZ)
                         </h3>
                         <p class="text-xs text-purple-700 mb-3">
-                            - <b>Tự động dàn trang:</b> Trình duyệt sẽ dàn chữ tràn màn hình liền mạch, đẹp mắt.<br>
-                            - <b>Đồ thị phức tạp:</b> Nếu có đồ thị phức tạp, app sẽ tạo <b>Khung chờ ảnh</b>, hãy cắt đồ thị bằng phím <code>Windows + Shift + S</code> rồi bấm nút <b>📷 Thêm Ảnh</b> ở bên dưới.
+                            - Hệ thống sẽ <b>Tự động gửi mã TikZ lên máy chủ ảo</b>, vẽ thành ảnh cực nét và chèn tự động vào đề.<br>
+                            - Hỗ trợ hoàn hảo mọi loại đồ thị hàm số và hình học không gian phức tạp.
                         </p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
@@ -219,8 +219,6 @@
                     </div>
                 </div>
 
-                <!-- (Giữ nguyên phần HTML Live Tracking, Xem kết quả, Student View như cũ để tiết kiệm dòng) -->
-                <!-- Live Tracking Section -->
                 <div class="card bg-[#F5F7FA] border border-gray-200 mb-6 rounded-xl shadow-sm">
                     <h2 class="text-xl font-bold text-gray-800 pb-4 mb-4 flex items-center gap-2">Theo dõi học sinh làm bài</h2>
                     <div class="flex gap-4 mb-6">
@@ -255,7 +253,6 @@
                     </div>
                 </div>
 
-                <!-- Results Section -->
                 <div class="card">
                     <h2 class="text-xl font-bold text-gray-800 border-b pb-4 mb-6 flex items-center gap-2">📊 Xem Kết Quả Thi</h2>
                     <div class="flex gap-4 mb-6 items-stretch max-w-lg">
@@ -332,7 +329,6 @@
         </div>
     </div>
     
-    <!-- Modals -->
     <div id="custom-alert-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-[9999]">
         <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
             <h3 id="modal-title" class="text-lg font-bold text-gray-800 mb-3">Thông Báo</h3>
@@ -433,25 +429,34 @@
             window.customAlert("Ứng dụng chạy trong chế độ cục bộ hoặc thiếu cấu hình Firebase.", "LƯU Ý QUAN TRỌNG");
         }
 
-        // ... (Giữ nguyên các hàm chống gian lận và EventListener) ...
-        window.addEventListener('beforeunload', (e) => { if (isExamInProgress) { e.preventDefault(); e.returnValue = 'Bạn đang trong quá trình làm bài thi!'; return e.returnValue; } });
+        window.addEventListener('beforeunload', (e) => {
+            if (isExamInProgress) { e.preventDefault(); e.returnValue = 'Bạn đang trong quá trình làm bài thi!'; return e.returnValue; }
+        });
         window.history.pushState(null, null, window.location.href);
         window.onpopstate = function () {
             if (isExamInProgress) {
                 window.history.pushState(null, null, window.location.href); 
-                violationCount++; document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`; customAlert(`Hệ thống phát hiện hành vi vuốt/quay lại trang. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Hệ thống phát hiện hành vi vuốt/quay lại trang. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
                 if (window.currentSessionId && currentExamData) { updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), { violation_count: violationCount }).catch(()=>{}); }
             }
         };
 
         let lastTouchY = 0;
         document.addEventListener('touchstart', (e) => { if(e.touches.length > 0) lastTouchY = e.touches[0].clientY; }, {passive: true});
-        document.addEventListener('touchmove', (e) => { if(isExamInProgress) { const currentY = e.touches[0].clientY; if (currentY > lastTouchY && window.scrollY <= 0) e.preventDefault(); } }, {passive: false});
+        document.addEventListener('touchmove', (e) => {
+            if(isExamInProgress) {
+                const currentY = e.touches[0].clientY;
+                if (currentY > lastTouchY && window.scrollY <= 0) e.preventDefault(); 
+            }
+        }, {passive: false});
 
         window.setRole = (role) => {
             if(role === 'teacher') {
                 document.getElementById('password-modal').classList.remove('hidden');
-                const input = document.getElementById('admin-key-input'); input.value = ''; input.focus();
+                const input = document.getElementById('admin-key-input');
+                input.value = ''; input.focus();
                 input.onkeydown = (e) => { if (e.key === 'Enter') checkAdminKey(); };
             } else {
                 document.getElementById('role-selection').classList.add('hidden');
@@ -473,18 +478,24 @@
 
         const handleVisibilityChange = () => {
             if (document.hidden && isExamInProgress) {
-                violationCount++; document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`; customAlert(`Hệ thống phát hiện bạn đã rời khỏi màn hình làm bài thi. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Hệ thống phát hiện bạn đã rời khỏi màn hình làm bài thi. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
                 if (window.currentSessionId && currentExamData) { updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), { violation_count: violationCount }).catch(()=>{}); }
             }
         }
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isExamInProgress) {
-                violationCount++; document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`; customAlert(`Bạn vừa thoát chế độ Toàn màn hình! Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Bạn vừa thoát chế độ Toàn màn hình! Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
             }
         });
         window.addEventListener('blur', () => {
             if (isExamInProgress) {
-                violationCount++; document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`; customAlert(`Bạn vừa thao tác sang một ứng dụng/cửa sổ khác! Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                violationCount++;
+                document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                customAlert(`Bạn vừa thao tác sang một ứng dụng/cửa sổ khác! Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
             }
         });
         window.addEventListener('resize', () => {
@@ -494,7 +505,9 @@
             const isKeyboardOpen = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
             if (!isKeyboardOpen) {
                 if (currentHeight < (baseScreenHeight * 0.7)) {
-                    violationCount++; document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`; customAlert(`Phát hiện chia đôi màn hình. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
+                    violationCount++;
+                    document.getElementById('violation-display').innerText = `Cảnh báo vi phạm: ${violationCount}`;
+                    customAlert(`Phát hiện chia đôi màn hình. Vi phạm lần ${violationCount}.`, "CẢNH BÁO GIAN LẬN");
                     baseScreenHeight = currentHeight;
                 } else if (currentHeight > baseScreenHeight) { baseScreenHeight = currentHeight; }
             }
@@ -503,14 +516,21 @@
         window.fileToBase64 = (input) => {
             return new Promise((resolve, reject) => {
                 if(input instanceof File) {
-                    const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = error => reject(error); reader.readAsDataURL(input); return;
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result.split(',')[1]); 
+                    reader.onerror = error => reject(error);
+                    reader.readAsDataURL(input); return;
                 }
-                const file = input.files[0]; if (!file) { resolve(null); return; }
-                const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = error => reject(error); reader.readAsDataURL(file);
+                const file = input.files[0];
+                if (!file) { resolve(null); return; }
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]); 
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
             });
         }
 
-        /* ----- HỖ TRỢ LATEX PARSER & TKZ-TAB (KHÔNG DÙNG TIKZJAX NỮA) ----- */
+        /* ----- BIÊN DỊCH TIKZ SANG SVG/PNG QUA API ----- */
         
         window.extractBalanced = (str, keyword) => {
             const idx = str.indexOf(keyword);
@@ -518,30 +538,45 @@
             let start = idx + keyword.length;
             while (start < str.length && /\s/.test(str[start])) start++;
             if (str[start] === '[') {
-                while (start < str.length && str[start] !== ']') start++; start++;
+                while (start < str.length && str[start] !== ']') start++;
+                start++;
             }
             while (start < str.length && /\s/.test(str[start])) start++;
             if (str[start] !== '{') return null;
 
-            let braces = 0; let end = start;
+            let braces = 0;
+            let end = start;
             for (let i = start; i < str.length; i++) {
                 if (str[i] === '{') braces++;
-                else if (str[i] === '}') { braces--; if (braces === 0) { end = i; break; } }
+                else if (str[i] === '}') {
+                    braces--;
+                    if (braces === 0) { end = i; break; }
+                }
             }
-            return { content: str.substring(start + 1, end), fullMatch: str.substring(idx, end + 1), startIndex: idx, endIndex: end + 1 };
+            return {
+                content: str.substring(start + 1, end),
+                fullMatch: str.substring(idx, end + 1),
+                startIndex: idx,
+                endIndex: end + 1
+            };
         };
 
         const parseOptions = (str, startKeyword) => {
             let temp = str.substring(str.indexOf(startKeyword) + startKeyword.length);
-            let options = []; let scanIdx = 0;
+            let options = [];
+            let scanIdx = 0;
             while (scanIdx < temp.length && /\s/.test(temp[scanIdx])) scanIdx++;
-            if (temp[scanIdx] === '[') { while (scanIdx < temp.length && temp[scanIdx] !== ']') scanIdx++; scanIdx++; }
+            if (temp[scanIdx] === '[') {
+                while (scanIdx < temp.length && temp[scanIdx] !== ']') scanIdx++;
+                scanIdx++;
+            }
             temp = temp.substring(scanIdx);
 
             for (let i = 0; i < 4; i++) {
                 while (temp.length > 0 && /\s/.test(temp[0])) temp = temp.substring(1);
                 if (temp[0] !== '{') break;
-                let braces = 0; let endIdx = 0;
+                let braces = 0;
+                let endIdx = 0;
                 for (let j = 0; j < temp.length; j++) {
                     if (temp[j] === '{') braces++;
                     else if (temp[j] === '}') { braces--; if (braces === 0) { endIdx = j; break; } }
@@ -653,7 +688,7 @@
             }
         };
 
-        const formatLatexMath = (text) => {
+        const formatLatexMath = (text, qId) => {
             if (!text) return '';
 
             // 1. Dọn dẹp dàn trang dư thừa
@@ -695,14 +730,18 @@
             }
 
             // 3. Xử lý TikZ
+            let tikzCounter = 0;
             text = text.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/g, (match) => {
                 if (match.includes('\\tkzTabInit') || match.includes('\\tkzTabLine')) {
                     return parseTkzTabToHTML(match);
                 } else {
-                    return `<div class="border-2 border-dashed border-blue-300 bg-blue-50 text-blue-600 rounded-xl p-6 w-full max-w-md mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4">
-                                <span class="text-4xl mb-3">📈</span>
-                                <span class="font-bold text-base mb-1">Đồ thị / Hình vẽ TikZ</span>
-                                <span class="text-xs text-gray-500 px-4">Đồ thị này có cấu trúc phức tạp. Vui lòng chụp màn hình đồ thị và dùng nút <b>📷 Thêm Ảnh Đề Bài</b> ở bên dưới để chèn vào.</span>
+                    tikzCounter++;
+                    const elementId = `tikz-${qId}-${tikzCounter}`;
+                    const b64 = btoa(unescape(encodeURIComponent(match)));
+                    return `<div id="${elementId}" class="tikz-pending border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl p-6 w-full max-w-md mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4" data-tikz="${b64}" data-qid="${qId}">
+                                <span class="text-4xl mb-3 animate-bounce">⏳</span>
+                                <span class="font-bold text-base mb-1 text-blue-600">Đang gửi yêu cầu biên dịch ảnh...</span>
+                                <span class="text-xs text-gray-500 px-4">Hệ thống đang tự động kết nối máy chủ để vẽ đồ thị TikZ cho bạn.</span>
                             </div>`;
                 }
             });
@@ -722,7 +761,73 @@
                 .replace(/\\hoac\{([\s\S]*?)\}/g, '\\begin{bmatrix} $1 \\end{bmatrix}');
         };
 
-        const parseSingleLatexQuestion = (block) => {
+        // Gửi API biên dịch Tikz sang rtex
+        window.compileTikzAsync = async (qId, elementId, tikzCode) => {
+            const el = document.getElementById(elementId);
+            if(!el) return;
+
+            const latexDoc = `\\documentclass[tikz,border=2mm]{standalone}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n${tikzCode}\n\\end{document}`;
+
+            try {
+                const formData = new URLSearchParams();
+                formData.append('code', latexDoc);
+                formData.append('format', 'png');
+                formData.append('density', '200');
+
+                const res = await fetch('https://rtex.probablyaweb.site/api/v2', {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    const imgUrl = `https://rtex.probablyaweb.site/api/v2/${data.filename}`;
+                    
+                    // Fetch lấy blob ảnh và chuyển đổi sang Base64
+                    const imgRes = await fetch(imgUrl);
+                    const blob = await imgRes.blob();
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const b64 = reader.result;
+                        const imgHtml = `<div class="w-full flex justify-center my-3"><img src="${b64}" class="max-h-64 object-contain rounded border shadow-sm"></div>`;
+                        
+                        if (el) el.outerHTML = imgHtml;
+
+                        // Lưu thay thế vào qBank để khi lưu không bị mất
+                        const q = window.qBank.find(x => x.id === qId);
+                        if (q) {
+                            const regex = new RegExp(`<div id="${elementId}"[^>]*>.*?</div>`, 'gs');
+                            q.qText = q.qText.replace(regex, imgHtml);
+                            q.sText = q.sText.replace(regex, imgHtml);
+                            q.options = q.options.map(opt => opt.replace(regex, imgHtml));
+                        }
+                    };
+                    reader.readAsDataURL(blob);
+                } else { throw new Error("Lỗi API rtex"); }
+            } catch(e) {
+                console.error("TikZ Compile Error:", e);
+                if(el) {
+                    el.innerHTML = `
+                        <span class="text-3xl mb-2">⚠️</span>
+                        <span class="font-bold text-base mb-1 text-red-600">Lỗi Biên Dịch Đồ Thị</span>
+                        <span class="text-xs text-gray-500 px-4">Mã TikZ phức tạp hoặc máy chủ quá tải. Vui lòng chụp màn hình đồ thị và dùng nút <b>📷 Thêm Ảnh</b> để chèn thủ công.</span>
+                    `;
+                    el.classList.remove('tikz-pending'); // Tránh lặp vô tận
+                }
+            }
+        };
+
+        window.processPendingTikz = () => {
+            document.querySelectorAll('.tikz-pending').forEach(el => {
+                const qId = el.getAttribute('data-qid');
+                const elementId = el.id;
+                const tikzCode = decodeURIComponent(escape(atob(el.getAttribute('data-tikz'))));
+                window.compileTikzAsync(qId, elementId, tikzCode);
+            });
+        };
+
+        const parseSingleLatexQuestion = (block, qId) => {
             let type = 'mcq', ans = '', qText = '', sText = '';
             let parsedOptions = []; 
 
@@ -740,7 +845,7 @@
                 let tfAns = '';
                 options.forEach((opt) => {
                     if (opt.includes('\\True')) tfAns += 'Đ'; else tfAns += 'S';
-                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim())); 
+                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim(), qId)); 
                 });
                 ans = tfAns;
             } else if (block.includes('\\shortans')) {
@@ -758,7 +863,7 @@
                 options.forEach((opt, idx) => {
                     let letter = ['A','B','C','D'][idx];
                     if (opt.includes('\\True')) ans = letter;
-                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim())); 
+                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim(), qId)); 
                 });
             } else {
                 type = 'short_answer';
@@ -766,7 +871,7 @@
             }
 
             qText = qText.replace(/\\begin\{ex\}/g, '').replace(/\\end\{ex\}/g, '').trim();
-            return { type, ans, qText: formatLatexMath(qText), sText: formatLatexMath(sText), options: parsedOptions, isLatex: true };
+            return { type, ans, qText: formatLatexMath(qText, qId), sText: formatLatexMath(sText, qId), options: parsedOptions, isLatex: true };
         };
 
         window.processLatexEntry = (btn) => {
@@ -778,11 +883,11 @@
                 let match; let count = 0;
                 while ((match = regex.exec(text)) !== null) {
                     const block = match[1];
-                    const qObj = parseSingleLatexQuestion(block);
+                    const qId = 'q_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2,5);
+                    const qObj = parseSingleLatexQuestion(block, qId);
                     if (qObj) {
                         window.qBank.push({
-                            id: 'q_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2,5),
-                            type: qObj.type, ans: qObj.ans, qText: qObj.qText, sText: qObj.sText, options: qObj.options, qImg: '', sImg: '', isLatex: true
+                            id: qId, type: qObj.type, ans: qObj.ans, qText: qObj.qText, sText: qObj.sText, options: qObj.options, qImg: '', sImg: '', isLatex: true
                         });
                         count++;
                     }
@@ -872,12 +977,7 @@
             const item = window.qBank.find(q => q.id === id); 
             if(item) { 
                 item[field] = value; 
-                // Cần render lại danh sách nếu là câu hỏi LaTeX để hình ảnh hiện ra chung với văn bản
-                if (item.isLatex && (field === 'qImg' || field === 'sImg')) {
-                    renderQBankUI();
-                } else if (field === 'type') {
-                    renderQBankUI(); 
-                }
+                if (item.isLatex && (field === 'qImg' || field === 'sImg')) { renderQBankUI(); } else if (field === 'type') { renderQBankUI(); }
             } 
         }
 
@@ -887,7 +987,6 @@
                 if(e.target.files[0]) {
                     const b64 = await fileToBase64(e.target.files[0]); 
                     updateQBankItem(id, field, b64);
-                    // Dành riêng cho dạng không phải LaTeX: cập nhật tag ảnh ngay lập tức
                     const imgEl = document.getElementById(`img-${field}-${id}`);
                     if(imgEl) { imgEl.src = 'data:image/png;base64,' + b64; imgEl.classList.remove('hidden'); }
                 }
@@ -983,7 +1082,10 @@
             document.getElementById('pick-tf').max = countTF; document.getElementById('pick-tf').value = countTF;
             document.getElementById('pick-sa').max = countSA; document.getElementById('pick-sa').value = countSA;
 
-            setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
+            setTimeout(() => { 
+                if (window.MathJax) MathJax.typesetPromise(); 
+                window.processPendingTikz(); 
+            }, 100);
         }
 
         window.saveExam = async (btnElement) => {
@@ -1187,7 +1289,6 @@
                 let mediaHtml = '';
                 if (q.is_latex) {
                     let fallbackImg = '';
-                    // Hình ảnh thêm tay sẽ nối ngay dưới đề bài
                     if (q.img_data) { fallbackImg = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mt-4 mx-auto shadow-sm block w-full md:w-auto">`; }
                     mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-blue-50/50 rounded-xl latex-content border border-blue-100 leading-relaxed shadow-sm block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}${fallbackImg}</div>`;
                 } else {
@@ -1367,85 +1468,234 @@
             } catch (e) { customAlert("Lỗi nộp bài: " + e.message); }
         }
 
-        window.startLiveTracking = async () => { /* ... Giữ nguyên như cũ ... */ 
+        /* --- XỬ LÝ LIVE TRACKING (GIÁO VIÊN) --- */
+        window.startLiveTracking = async () => {
             if (!isFirebaseConfigured()) return customAlert("Lỗi: Firebase chưa được cấu hình.");
             const examId = document.getElementById('live-exam-id').value.trim().toUpperCase();
             if (!examId) return customAlert("Vui lòng nhập mã đề!");
+
             const container = document.getElementById('live-tracking-container');
             const listContainer = document.getElementById('live-students-list');
-            container.classList.remove('hidden'); listContainer.innerHTML = '<p class="text-gray-500 italic text-center w-full py-4 animate-pulse">Đang kết nối hệ thống thời gian thực...</p>';
+            
+            container.classList.remove('hidden');
+            listContainer.innerHTML = '<p class="text-gray-500 italic text-center w-full py-4 animate-pulse">Đang kết nối hệ thống thời gian thực...</p>';
+
             try {
                 const docSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_exams', examId));
                 if (!docSnap.exists()) throw new Error("Mã đề không tồn tại!");
                 const qCount = docSnap.data().question_count;
+
                 if (liveUnsubscribe) { liveUnsubscribe(); liveUnsubscribe = null; }
+
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', examId, 'sessions'));
+
                 liveUnsubscribe = onSnapshot(q, (snapshot) => {
                     let activeCount = 0; let doneCount = 0;
-                    if (snapshot.empty) { document.getElementById('live-active-count').innerText = 0; document.getElementById('live-done-count').innerText = 0; listContainer.innerHTML = '<p class="text-gray-500 italic text-center w-full py-4">Chưa có học sinh nào tham gia.</p>'; return; }
+                    
+                    if (snapshot.empty) {
+                        document.getElementById('live-active-count').innerText = 0;
+                        document.getElementById('live-done-count').innerText = 0;
+                        listContainer.innerHTML = '<p class="text-gray-500 italic text-center w-full py-4">Chưa có học sinh nào tham gia.</p>';
+                        return;
+                    }
+
                     let html = '';
                     snapshot.forEach(doc => {
                         const data = doc.data();
-                        if (data.status === 'testing') activeCount++; if (data.status === 'completed') doneCount++;
-                        const progress = data.progress || []; const answeredCount = progress.filter(x => x === true).length;
+                        if (data.status === 'testing') activeCount++;
+                        if (data.status === 'completed') doneCount++;
+
+                        const progress = data.progress || [];
+                        const answeredCount = progress.filter(x => x === true).length;
                         const pct = qCount > 0 ? (answeredCount / qCount) * 100 : 0;
                         const timeStr = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '';
+                        
                         const borderColor = data.status === 'completed' ? 'border-gray-400 opacity-80' : 'border-green-700';
-                        html += `<div class="bg-white rounded-lg border-l-[5px] ${borderColor} shadow-sm p-4 w-[280px] flex flex-col gap-2 relative transition-all duration-300"><div class="font-bold text-gray-800 text-[15px] uppercase truncate pr-4" title="${data.name}">${data.name}</div><div class="text-xs text-gray-500 font-medium mt-[-5px]">SBD: ${data.sbd || 'N/A'} - Lớp ${data.class_ || ''}</div><div class="w-full bg-gray-200 rounded-full h-1.5 mt-1"><div class="bg-green-700 h-1.5 rounded-full transition-all duration-500" style="width: ${pct}%"></div></div><div class="flex justify-between items-center text-xs text-gray-700 font-medium mt-1"><span>Đã làm ${answeredCount}/${qCount}</span><span class="${data.violation_count > 0 ? 'text-red-600 font-bold' : ''}">Vi phạm ${data.violation_count || 0}</span></div>${data.status === 'completed' ? `<div class="text-xs font-bold text-gray-800 mt-1">Đã nộp ${timeStr},${(data.score || 0).toFixed(2)} điểm</div>` : ''}<div class="mt-2"><button onclick="resetAttempt('${examId}', '${doc.id}')" class="text-[11px] border border-gray-300 rounded-md px-3 py-1 hover:bg-gray-100 text-gray-700 font-semibold shadow-sm">Cấp lại lượt</button></div></div>`;
+
+                        html += `
+                            <div class="bg-white rounded-lg border-l-[5px] ${borderColor} shadow-sm p-4 w-[280px] flex flex-col gap-2 relative transition-all duration-300">
+                                <div class="font-bold text-gray-800 text-[15px] uppercase truncate pr-4" title="${data.name}">${data.name}</div>
+                                <div class="text-xs text-gray-500 font-medium mt-[-5px]">SBD: ${data.sbd || 'N/A'} - Lớp ${data.class_ || ''}</div>
+                                
+                                <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                                    <div class="bg-green-700 h-1.5 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+                                </div>
+                                
+                                <div class="flex justify-between items-center text-xs text-gray-700 font-medium mt-1">
+                                    <span>Đã làm ${answeredCount}/${qCount}</span>
+                                    <span class="${data.violation_count > 0 ? 'text-red-600 font-bold' : ''}">Vi phạm ${data.violation_count || 0}</span>
+                                </div>
+                                
+                                ${data.status === 'completed' ? `
+                                    <div class="text-xs font-bold text-gray-800 mt-1">Đã nộp ${timeStr},${(data.score || 0).toFixed(2)} điểm</div>
+                                ` : ''}
+                                
+                                <div class="mt-2">
+                                    <button onclick="resetAttempt('${examId}', '${doc.id}')" class="text-[11px] border border-gray-300 rounded-md px-3 py-1 hover:bg-gray-100 text-gray-700 font-semibold shadow-sm">Cấp lại lượt</button>
+                                </div>
+                            </div>
+                        `;
                     });
-                    document.getElementById('live-active-count').innerText = activeCount; document.getElementById('live-done-count').innerText = doneCount; listContainer.innerHTML = html;
+                    
+                    document.getElementById('live-active-count').innerText = activeCount;
+                    document.getElementById('live-done-count').innerText = doneCount;
+                    listContainer.innerHTML = html;
+                    
                 }, (error) => { listContainer.innerHTML = `<p class="text-red-500 italic text-center py-4">Mất kết nối. Thử lại sau.</p>`; });
+
             } catch (e) { listContainer.innerHTML = `<p class="text-red-500 italic text-center py-4">Lỗi: ${e.message}</p>`; }
         };
-        window.zoomLiveTracking = (delta) => { /* ... Giữ nguyên ... */ 
-            if (delta === 0) window.liveTrackingZoomLevel = 1.0; else window.liveTrackingZoomLevel = Math.max(0.5, Math.min(2.0, window.liveTrackingZoomLevel + delta));
-            const listContainer = document.getElementById('live-students-list'); const levelDisplay = document.getElementById('live-zoom-level-display');
-            if(listContainer) { if ('zoom' in listContainer.style) listContainer.style.zoom = window.liveTrackingZoomLevel; else { listContainer.style.transform = `scale(${window.liveTrackingZoomLevel})`; listContainer.style.transformOrigin = '0 0'; } }
+
+        window.zoomLiveTracking = (delta) => {
+            if (delta === 0) window.liveTrackingZoomLevel = 1.0; 
+            else window.liveTrackingZoomLevel = Math.max(0.5, Math.min(2.0, window.liveTrackingZoomLevel + delta));
+            
+            const listContainer = document.getElementById('live-students-list');
+            const levelDisplay = document.getElementById('live-zoom-level-display');
+            
+            if(listContainer) {
+                if ('zoom' in listContainer.style) listContainer.style.zoom = window.liveTrackingZoomLevel;
+                else { listContainer.style.transform = `scale(${window.liveTrackingZoomLevel})`; listContainer.style.transformOrigin = '0 0'; }
+            }
             if(levelDisplay) levelDisplay.innerText = Math.round(window.liveTrackingZoomLevel * 100) + '%';
         }
-        window.resetAttempt = async (examId, sessionId) => { /* ... Giữ nguyên ... */ 
+
+        window.resetAttempt = async (examId, sessionId) => {
             if (!confirm("Xác nhận xóa bài và cấp lại lượt làm bài cho học sinh này?")) return;
-            try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', examId, 'sessions', sessionId)); customAlert("Đã xóa phiên làm bài. Cấp lại lượt thành công!"); } catch (e) { customAlert("Lỗi cấp lại lượt: " + e.message); }
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', examId, 'sessions', sessionId));
+                customAlert("Đã xóa phiên làm bài. Cấp lại lượt thành công!");
+            } catch (e) { customAlert("Lỗi cấp lại lượt: " + e.message); }
         }
+
         window.forceSubmitAll = () => { customAlert("Tính năng tự chốt bài hoạt động dựa trên cấu hình 'Thời gian đóng đề' khi tạo đề thi."); }
-        
-        const renderScoreChart = (results, examId) => { /* ... Giữ nguyên ... */ 
+
+        /* --- XỬ LÝ XEM KẾT QUẢ --- */
+        const renderScoreChart = (results, examId) => {
             const chartContainer = document.getElementById('results-chart-container'); const chartCanvas = document.getElementById('scoreChart');
             if (results.length === 0) { chartContainer.classList.add('hidden'); return; }
             chartContainer.classList.remove('hidden'); if (scoreChartInstance) scoreChartInstance.destroy();
-            const labels = results.map(r => r.name); const data = results.map(r => r.score); const maxScore = results.length > 0 ? Math.ceil(Math.max(...data)) : 0;
-            scoreChartInstance = new Chart(chartCanvas, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Tổng Điểm', data: data, backgroundColor: '#04CCCC', borderRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: Math.min(10, Math.max(maxScore + 1, 10)) } }, plugins: { legend: { display: false } } } });
+            const labels = results.map(r => r.name); const data = results.map(r => r.score);
+            const maxScore = results.length > 0 ? Math.ceil(Math.max(...data)) : 0;
+            scoreChartInstance = new Chart(chartCanvas, {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: 'Tổng Điểm', data: data, backgroundColor: '#04CCCC', borderRadius: 5 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: Math.min(10, Math.max(maxScore + 1, 10)) } }, plugins: { legend: { display: false } } }
+            });
         }
-        const renderQuestionAnalysisChart = (results, examId) => { /* ... Giữ nguyên ... */ 
+
+        const renderQuestionAnalysisChart = (results, examId) => {
             const chartContainer = document.getElementById('question-chart-container'); const chartCanvas = document.getElementById('questionChart');
-            const sample = results.find(r => r.details && Array.isArray(r.details)); if (!sample) { chartContainer.classList.add('hidden'); return; }
+            const sample = results.find(r => r.details && Array.isArray(r.details));
+            if (!sample) { chartContainer.classList.add('hidden'); return; }
             chartContainer.classList.remove('hidden'); if (questionChartInstance) questionChartInstance.destroy();
             const stats = Array.from({length: sample.details.length}, () => ({ count: 0 }));
             results.forEach(r => { if (r.details) r.details.forEach((isCorrect, idx) => { if (isCorrect) stats[idx].count++; }); });
-            questionChartInstance = new Chart(chartCanvas, { type: 'bar', data: { labels: stats.map((_, i) => `Câu ${i + 1}`), datasets: [{ label: 'Số học sinh làm đúng', data: stats.map(s => s.count), backgroundColor: '#FF9F43', borderRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }, plugins: { legend: { display: false } } } });
+            questionChartInstance = new Chart(chartCanvas, {
+                type: 'bar',
+                data: { labels: stats.map((_, i) => `Câu ${i + 1}`), datasets: [{ label: 'Số học sinh làm đúng', data: stats.map(s => s.count), backgroundColor: '#FF9F43', borderRadius: 5 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }, plugins: { legend: { display: false } } }
+            });
         }
-        window.loadResults = async () => { /* ... Giữ nguyên ... */ 
+
+        window.loadResults = async () => {
             if (!isFirebaseConfigured()) return customAlert("Lỗi: Firebase chưa được cấu hình.");
-            const examId = document.getElementById('result-exam-id').value.trim().toUpperCase(); if (!examId) return customAlert("Vui lòng nhập mã đề");
-            const container = document.getElementById('results-table-container'); Array.from(container.children).forEach(child => { if (child.id !== 'results-chart-container' && child.id !== 'question-chart-container' && child.id !== 'empty-results-text') { child.remove(); } });
+            const examId = document.getElementById('result-exam-id').value.trim().toUpperCase();
+            if (!examId) return customAlert("Vui lòng nhập mã đề");
+
+            const container = document.getElementById('results-table-container');
+            
+            Array.from(container.children).forEach(child => { 
+                if (child.id !== 'results-chart-container' && child.id !== 'question-chart-container' && child.id !== 'empty-results-text') {
+                    child.remove(); 
+                }
+            });
             document.getElementById('empty-results-text').classList.add('hidden');
+
             try {
                 const docSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', examId));
-                if (!docSnap.exists() || !docSnap.data().results || docSnap.data().results.length === 0) { document.getElementById('empty-results-text').classList.remove('hidden'); document.getElementById('results-chart-container').classList.add('hidden'); document.getElementById('question-chart-container').classList.add('hidden'); return; }
-                const results = docSnap.data().results || []; results.sort((a, b) => b.score - a.score);
+                if (!docSnap.exists()) {
+                    document.getElementById('empty-results-text').classList.remove('hidden');
+                    document.getElementById('results-chart-container').classList.add('hidden');
+                    document.getElementById('question-chart-container').classList.add('hidden');
+                    return;
+                }
+                
+                const results = docSnap.data().results || [];
+                if (results.length === 0) {
+                    document.getElementById('empty-results-text').classList.remove('hidden');
+                    document.getElementById('results-chart-container').classList.add('hidden');
+                    document.getElementById('question-chart-container').classList.add('hidden');
+                    return;
+                }
+                
+                results.sort((a, b) => b.score - a.score);
                 renderScoreChart(results, examId); renderQuestionAnalysisChart(results, examId);
-                let htmlTable = `<div class="mb-4 flex justify-between items-center mt-6"><span class="font-bold text-gray-700">Tổng: ${results.length} bài nộp</span><button onclick="exportExcel('${examId}')" class="btn bg-green-600 text-sm hover:bg-green-700 shadow">📤 Xuất Excel</button></div><div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm"><table class="min-w-full bg-white text-sm"><thead class="bg-gray-100 text-gray-700"><tr><th class="py-3 px-4 border-b text-left">SBD</th><th class="py-3 px-4 border-b text-left">Học sinh</th><th class="py-3 px-4 border-b text-left">Lớp</th><th class="py-3 px-4 border-b text-left">Trường</th><th class="py-3 px-4 border-b text-center font-bold text-primary">Điểm</th><th class="py-3 px-4 border-b text-center text-red-500">Vi phạm</th><th class="py-3 px-4 border-b text-center">Bắt đầu</th><th class="py-3 px-4 border-b text-center">Làm bài</th><th class="py-3 px-4 border-b text-right">Thời gian nộp</th></tr></thead><tbody>`;
+
+                let htmlTable = `
+                    <div class="mb-4 flex justify-between items-center mt-6">
+                        <span class="font-bold text-gray-700">Tổng: ${results.length} bài nộp</span>
+                        <button onclick="exportExcel('${examId}')" class="btn bg-green-600 text-sm hover:bg-green-700 shadow">📤 Xuất Excel</button>
+                    </div>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+                        <table class="min-w-full bg-white text-sm">
+                            <thead class="bg-gray-100 text-gray-700">
+                                <tr>
+                                    <th class="py-3 px-4 border-b text-left">SBD</th>
+                                    <th class="py-3 px-4 border-b text-left">Học sinh</th>
+                                    <th class="py-3 px-4 border-b text-left">Lớp</th>
+                                    <th class="py-3 px-4 border-b text-left">Trường</th>
+                                    <th class="py-3 px-4 border-b text-center font-bold text-primary">Điểm</th>
+                                    <th class="py-3 px-4 border-b text-center text-red-500">Vi phạm</th>
+                                    <th class="py-3 px-4 border-b text-center">Bắt đầu</th>
+                                    <th class="py-3 px-4 border-b text-center">Làm bài</th>
+                                    <th class="py-3 px-4 border-b text-right">Thời gian nộp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
                 results.forEach(r => {
-                    let startTimeDisplay = '-'; if (r.startedAt && r.startedAt !== 'N/A') { const d = new Date(r.startedAt); startTimeDisplay = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`; }
-                    htmlTable += `<tr class="hover:bg-gray-50 transition-colors"><td class="py-3 px-4 border-b text-gray-800 font-semibold">${r.sbd || '-'}</td><td class="py-3 px-4 border-b font-medium text-gray-800">${r.name}</td><td class="py-3 px-4 border-b text-gray-600">${r.class_}</td><td class="py-3 px-4 border-b text-gray-600">${r.school}</td><td class="py-3 px-4 border-b text-center font-bold text-lg text-primary">${r.score.toFixed(2)}</td><td class="py-3 px-4 border-b text-center text-red-500 font-bold">${r.violation_count || 0}</td><td class="py-3 px-4 border-b text-center text-gray-600">${startTimeDisplay}</td><td class="py-3 px-4 border-b text-center font-semibold text-gray-700">${r.duration || '-'}</td><td class="py-3 px-4 border-b text-right text-gray-500">${new Date(r.submittedAt).toLocaleString('vi-VN')}</td></tr>`;
+                    let startTimeDisplay = '-';
+                    if (r.startedAt && r.startedAt !== 'N/A') {
+                        const d = new Date(r.startedAt); startTimeDisplay = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                    }
+                    htmlTable += `
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="py-3 px-4 border-b text-gray-800 font-semibold">${r.sbd || '-'}</td>
+                            <td class="py-3 px-4 border-b font-medium text-gray-800">${r.name}</td>
+                            <td class="py-3 px-4 border-b text-gray-600">${r.class_}</td>
+                            <td class="py-3 px-4 border-b text-gray-600">${r.school}</td>
+                            <td class="py-3 px-4 border-b text-center font-bold text-lg text-primary">${r.score.toFixed(2)}</td>
+                            <td class="py-3 px-4 border-b text-center text-red-500 font-bold">${r.violation_count || 0}</td>
+                            <td class="py-3 px-4 border-b text-center text-gray-600">${startTimeDisplay}</td>
+                            <td class="py-3 px-4 border-b text-center font-semibold text-gray-700">${r.duration || '-'}</td>
+                            <td class="py-3 px-4 border-b text-right text-gray-500">${new Date(r.submittedAt).toLocaleString('vi-VN')}</td>
+                        </tr>
+                    `;
                 });
-                htmlTable += '</tbody></table></div>'; const summaryDiv = document.createElement('div'); summaryDiv.innerHTML = htmlTable; container.appendChild(summaryDiv); window.currentResults = results;
+                
+                htmlTable += '</tbody></table></div>';
+                const summaryDiv = document.createElement('div'); summaryDiv.innerHTML = htmlTable;
+                container.appendChild(summaryDiv);
+                window.currentResults = results;
+
             } catch (e) { customAlert("Lỗi tải kết quả: " + e.message); }
         }
-        window.exportExcel = (examId) => { /* ... Giữ nguyên ... */ 
+
+        window.exportExcel = (examId) => {
             if (!window.currentResults) return;
-            const ws = XLSX.utils.json_to_sheet(window.currentResults.map(r => ({ "SBD": r.sbd || '-', "Họ Tên": r.name, "Lớp": r.class_, "Trường": r.school, "Điểm": r.score, "Số lần vi phạm": r.violation_count || 0, "Bắt đầu": r.startedAt && r.startedAt !== 'N/A' ? new Date(r.startedAt).toLocaleString('vi-VN') : '-', "Thời gian làm bài": r.duration || '-', "Thời gian nộp": new Date(r.submittedAt).toLocaleString('vi-VN') })));
-            const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "KetQua"); XLSX.writeFile(wb, `KetQua_DiemThi_${examId}.xlsx`);
+            const ws = XLSX.utils.json_to_sheet(window.currentResults.map(r => ({
+                "SBD": r.sbd || '-',
+                "Họ Tên": r.name, "Lớp": r.class_, "Trường": r.school, "Điểm": r.score,
+                "Số lần vi phạm": r.violation_count || 0,
+                "Bắt đầu": r.startedAt && r.startedAt !== 'N/A' ? new Date(r.startedAt).toLocaleString('vi-VN') : '-',
+                "Thời gian làm bài": r.duration || '-',
+                "Thời gian nộp": new Date(r.submittedAt).toLocaleString('vi-VN')
+            })));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "KetQua");
+            XLSX.writeFile(wb, `KetQua_DiemThi_${examId}.xlsx`);
         }
     </script>
 </body>
