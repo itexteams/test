@@ -13,6 +13,10 @@
     <!-- Chart.js for visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     
+    <!-- TikZJax for Rendering Graphs directly in browser -->
+    <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+    <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+
     <!-- MathJax for LaTeX Rendering -->
     <script>
       window.MathJax = {
@@ -59,6 +63,9 @@
         .q-circle.answered { opacity: 0; transform: scale(0); width: 0; height: 0; margin: 0; padding: 0; border-width: 0; pointer-events: none; }
         .highlight-question { animation: pulse-border 1.5s ease-out; }
         @keyframes pulse-border { 0% { box-shadow: 0 0 0 0 rgba(20, 188, 156, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(20, 188, 156, 0); } 100% { box-shadow: 0 0 0 0 rgba(20, 188, 156, 0); } }
+
+        /* Fix TikZ Jax rendering spacing */
+        .tikz-render-container svg { max-width: 100%; height: auto; }
     </style>
 </head>
 <body class="p-4 min-h-screen flex flex-col items-center tex2jax_ignore">
@@ -164,9 +171,12 @@
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Đã Hỗ Trợ Đưa Trực Tiếp Phương Án Vào Nút Bấm)
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Bản Nâng Cấp Tối Ưu)
                         </h3>
-                        <p class="text-xs text-purple-700 mb-3">Hỗ trợ tự vẽ Bảng Biến Thiên (tkzTab) và dàn trang trắc nghiệm thông minh.</p>
+                        <p class="text-xs text-purple-700 mb-3">
+                            - <b>Tự động dàn trang:</b> Các lệnh `\immini` được chia cột gọn gàng, chữ liền mạch.<br>
+                            - <b>Hiển thị đồ thị:</b> Tích hợp engine biên dịch TikZ bằng WebAssembly tự vẽ đồ thị cực nét.
+                        </p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
                             <button onclick="processLatexEntry(this)" class="btn bg-purple-600 hover:bg-purple-700 shadow-md">✍️ Phân Tích & Thêm Vào Ngân Hàng</button>
@@ -527,7 +537,7 @@
             });
         }
 
-        /* ----- HỖ TRỢ LATEX PARSER & TKZ-TAB ----- */
+        /* ----- HỖ TRỢ LATEX PARSER & TKZ-TAB & ĐỒ THỊ TIKZ ----- */
         
         window.extractBalanced = (str, keyword) => {
             const idx = str.indexOf(keyword);
@@ -584,6 +594,29 @@
             return options;
         };
 
+        // Hàm bóc tách \scalebox để dọn dẹp lệnh trước khi ném vào TikZ Jax
+        const removeScalebox = (text) => {
+            let idx = text.indexOf('\\scalebox');
+            while(idx !== -1) {
+                let paramStart = text.indexOf('{', idx);
+                let paramEnd = text.indexOf('}', paramStart);
+                let contentStart = text.indexOf('{', paramEnd + 1);
+                
+                let braces = 0; let contentEnd = -1;
+                for(let i = contentStart; i < text.length; i++) {
+                    if(text[i] === '{') braces++;
+                    if(text[i] === '}') { braces--; if(braces===0){contentEnd = i; break;} }
+                }
+                
+                if(contentEnd !== -1) {
+                    let content = text.substring(contentStart + 1, contentEnd);
+                    text = text.substring(0, idx) + content + text.substring(contentEnd + 1);
+                } else break;
+                idx = text.indexOf('\\scalebox');
+            }
+            return text;
+        };
+
         const parseTkzTabToHTML = (tikzStr) => {
             try {
                 const initMatch = tikzStr.match(/\\tkzTabInit(?:\[[^\]]*\])?\s*\{((?:[^{}]|\{[^{}]*\})*)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}/);
@@ -605,7 +638,6 @@
                 
                 let html = `<div class="overflow-x-auto my-5 w-full flex justify-center"><table class="border-collapse border border-gray-800 text-center bg-white min-w-[500px] shadow-sm font-math">`;
                 
-                // ROW 1: x
                 html += `<tr><td class="border border-gray-800 p-3 font-bold bg-gray-50 text-lg w-16">${rowHeaders[0]}</td>`;
                 for (let i = 0; i < N; i++) {
                     html += `<td class="border-t border-b border-gray-800 p-3 text-lg min-w-[60px]">${xValues[i]}</td>`;
@@ -613,7 +645,6 @@
                 }
                 html += `</tr>`;
                 
-                // ROW 2: y'
                 if (rowHeaders.length > 1 && yPrimeValues.length > 0) {
                     html += `<tr><td class="border border-gray-800 p-3 font-bold bg-gray-50 text-lg">${rowHeaders[1]}</td>`;
                     for (let i = 0; i < 2 * N - 1; i++) {
@@ -625,42 +656,31 @@
                     html += `</tr>`;
                 }
                 
-                // ROW 3: y (Có mũi tên SVG)
                 if (rowHeaders.length > 2 && yVars.length > 0) {
                     html += `<tr><td class="border border-gray-800 p-3 font-bold bg-gray-50 text-lg">${rowHeaders[2]}</td>`;
                     html += `<td colspan="${2 * N - 1}" class="border border-gray-800 p-0 relative h-32">`;
                     html += `<div class="w-full h-full relative p-2 min-h-[120px]">`;
                     
                     let points = [];
-                    
                     yVars.forEach((v, i) => {
                         const parts = v.split('/');
                         if (parts.length < 2) return;
                         const posStr = parts[0];
                         let leftPct = (i / (N - 1)) * 100;
                         
-                        // Nếu có gián đoạn (điểm kép)
                         if (parts.length >= 3 && posStr.includes('D')) {
-                            let valLeft = parts[1];
-                            let valRight = parts[2];
-                            let isTopL = posStr[0] === '+';
-                            let isTopR = posStr[posStr.length - 1] === '+';
-                            
+                            let valLeft = parts[1]; let valRight = parts[2];
+                            let isTopL = posStr[0] === '+'; let isTopR = posStr[posStr.length - 1] === '+';
                             html += `<div class="absolute ${isTopL ? 'top-2' : 'bottom-2'} pr-4 text-lg font-bold bg-white" style="left: ${leftPct}%; transform: translateX(-100%); z-index: 10;">${valLeft}</div>`;
                             html += `<div class="absolute ${isTopR ? 'top-2' : 'bottom-2'} pl-4 text-lg font-bold bg-white" style="left: ${leftPct}%; transform: translateX(0); z-index: 10;">${valRight}</div>`;
-                            
-                            // Nét gạch gián đoạn
                             html += `<div class="absolute top-0 w-1 h-full border-l-4 border-double border-gray-400" style="left: ${leftPct}%; transform: translateX(-50%); z-index: 0;"></div>`;
-                            
                             points.push({ i, isTop: isTopL, leftPct, isDiscontinuousLeft: true });
                             points.push({ i, isTop: isTopR, leftPct, isDiscontinuousRight: true });
                         } else {
                             let val = parts.slice(1).join('/');
-                            let isTop = posStr.includes('+');
-                            let isBottom = posStr.includes('-');
+                            let isTop = posStr.includes('+'); let isBottom = posStr.includes('-');
                             let transform = i === 0 ? 'translateX(0)' : (i === N - 1 ? 'translateX(-100%)' : 'translateX(-50%)');
                             let alignClass = isTop ? 'top-2' : (isBottom ? 'bottom-2' : 'top-1/2 -translate-y-1/2');
-                            
                             html += `<div class="absolute ${alignClass} px-2 text-lg font-bold bg-white" style="left: ${leftPct}%; transform: ${transform}; z-index: 10;">${val}</div>`;
                             points.push({ i, isTop, leftPct });
                         }
@@ -668,21 +688,13 @@
                     
                     html += `<svg class="absolute top-0 left-0 w-full h-full pointer-events-none" style="z-index: 5;">`;
                     html += `<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#4B5563"/></marker></defs>`;
-                    
                     for (let i = 0; i < points.length - 1; i++) {
-                        const p1 = points[i];
-                        const p2 = points[i+1];
-                        
-                        if (p1.leftPct === p2.leftPct) continue; // Bỏ qua đoạn nối tại ngay điểm gián đoạn
-                        
-                        let startX = p1.leftPct;
-                        let endX = p2.leftPct;
-                        let startY = p1.isTop ? 20 : 80;
-                        let endY = p2.isTop ? 20 : 80;
-                        
+                        const p1 = points[i]; const p2 = points[i+1];
+                        if (p1.leftPct === p2.leftPct) continue;
+                        let startX = p1.leftPct; let endX = p2.leftPct;
+                        let startY = p1.isTop ? 20 : 80; let endY = p2.isTop ? 20 : 80;
                         let sxOffset = (p1.leftPct === 0 || p1.isDiscontinuousRight) ? 35 : 25;
                         let exOffset = (p2.leftPct === 100 || p2.isDiscontinuousLeft) ? 35 : 25;
-                        
                         html += `<line x1="calc(${startX}% + ${sxOffset}px)" y1="${startY}%" x2="calc(${endX}% - ${exOffset}px)" y2="${endY}%" stroke="#4B5563" stroke-width="1.5" marker-end="url(#arrow)" />`;
                     }
                     html += `</svg></div></td></tr>`;
@@ -691,22 +703,67 @@
                 return html;
             } catch (e) {
                 console.error("Lỗi parse bảng biến thiên:", e);
-                return tikzStr; // Trả về LaTeX gốc nếu lỗi
+                return tikzStr;
             }
         };
 
         const formatLatexMath = (text) => {
             if (!text) return '';
-            text = text.replace(/\\begin\{tikzpicture\}[\s\S]*?\\tkzTabInit[\s\S]*?\\end\{tikzpicture\}/g, (match) => {
-                return parseTkzTabToHTML(match);
+
+            // 1. Dọn dẹp dàn trang dư thừa
+            text = text.replace(/\\begin\{minipage\}\{.*?\}/g, '');
+            text = text.replace(/\\end\{minipage\}/g, '');
+            text = removeScalebox(text); 
+
+            // 2. Parse \immini - Biến thành 2 cột Flexbox tự động co giãn
+            let idx = text.indexOf('\\immini');
+            while (idx !== -1) {
+                let start1 = text.indexOf('{', idx);
+                let bracketStart = text.indexOf('[', idx);
+                if (bracketStart !== -1 && bracketStart < start1) {
+                    let bracketEnd = text.indexOf(']', bracketStart);
+                    start1 = text.indexOf('{', bracketEnd);
+                }
+                
+                let end1 = -1, braces1 = 0;
+                for (let i = start1; i < text.length; i++) {
+                    if (text[i] === '{') braces1++;
+                    if (text[i] === '}') { braces1--; if (braces1 === 0) { end1 = i; break; } }
+                }
+                let start2 = text.indexOf('{', end1 + 1);
+                let end2 = -1, braces2 = 0;
+                for (let i = start2; i < text.length; i++) {
+                    if (text[i] === '{') braces2++;
+                    if (text[i] === '}') { braces2--; if (braces2 === 0) { end2 = i; break; } }
+                }
+                if (end1 !== -1 && end2 !== -1) {
+                    let textPart = text.substring(start1 + 1, end1);
+                    let imgPart = text.substring(start2 + 1, end2);
+                    let fullMatch = text.substring(idx, end2 + 1);
+                    
+                    let htmlStr = `<div class="flex flex-col md:flex-row gap-6 items-start my-3 w-full"><div class="flex-1 text-gray-800 text-justify leading-relaxed whitespace-normal break-words">${textPart}</div><div class="w-full md:w-auto min-w-[250px] flex justify-center items-center overflow-x-auto">${imgPart}</div></div>`;
+                    text = text.replace(fullMatch, htmlStr);
+                } else break;
+                idx = text.indexOf('\\immini');
+            }
+
+            // 3. Xử lý TikZ
+            text = text.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/g, (match) => {
+                if (match.includes('\\tkzTabInit')) {
+                    return parseTkzTabToHTML(match);
+                } else {
+                    return `<div class="tikz-render-container flex justify-center my-3 overflow-x-auto w-full"><script type="text/tikz">${match}<\/script></div>`;
+                }
             });
+
+            // 4. Các định dạng chung khác
             return text
-                .replace(/\\begin\{center\}/g, '<div class="text-center w-full flex justify-center">')
+                .replace(/\\begin\{center\}/g, '<div class="text-center w-full flex justify-center my-2">')
                 .replace(/\\end\{center\}/g, '</div>')
-                .replace(/\\begin\{enumEX\}(?:\[.*?\])?\{.*?\}/g, '<div class="pl-4 mt-2">')
+                .replace(/\\begin\{enumEX\}(?:\[.*?\])?\{.*?\}/g, '<div class="pl-5 mt-2 space-y-2">')
                 .replace(/\\end\{enumEX\}/g, '</div>')
-                .replace(/\\item/g, '<div class="mt-2 text-primary font-bold inline-block">•</div> ')
-                .replace(/\\hspace\*\{.*?\}/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+                .replace(/\\item/g, '<br><span class="text-primary font-bold mr-2">•</span> ')
+                .replace(/\\hspace\*?\{.*?\}/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
                 .replace(/\\heva\{([\s\S]*?)\}/g, '\\begin{cases} $1 \\end{cases}')
                 .replace(/\\hoac\{([\s\S]*?)\}/g, '\\begin{bmatrix} $1 \\end{bmatrix}');
         };
@@ -727,7 +784,7 @@
                 qText = block.substring(0, keywordIdx).trim();
                 const options = parseOptions(block, '\\choiceTFn');
                 let tfAns = '';
-                options.forEach((opt, idx) => {
+                options.forEach((opt) => {
                     if (opt.includes('\\True')) tfAns += 'Đ'; else tfAns += 'S';
                     parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim())); 
                 });
@@ -887,15 +944,15 @@
                         let optionsPreview = '';
                         if (q.options && q.options.length > 0) {
                             if (q.type === 'mcq') {
-                                optionsPreview = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">${['A','B','C','D'][idx]}.</b><span class="latex-content">${opt}</span></div>`).join('')}</div>`;
+                                optionsPreview = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">${['A','B','C','D'][idx]}.</b><span class="latex-content break-words whitespace-normal">${opt}</span></div>`).join('')}</div>`;
                             } else if (q.type === 'true_false') {
-                                optionsPreview = `<div class="grid grid-cols-1 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">Ý ${['a','b','c','d'][idx]}:</b><span class="latex-content">${opt}</span></div>`).join('')}</div>`;
+                                optionsPreview = `<div class="grid grid-cols-1 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2 whitespace-nowrap">Ý ${['a','b','c','d'][idx]}:</b><span class="latex-content break-words whitespace-normal">${opt}</span></div>`).join('')}</div>`;
                             }
                         }
 
                         mediaHTML = `
                             <div class="w-full lg:flex-1 flex flex-col gap-2">
-                                <div class="text-sm text-gray-800 overflow-y-auto max-h-64 p-4 w-full latex-content border bg-gray-50 rounded">${q.qText}${optionsPreview}</div>
+                                <div class="text-sm text-gray-800 overflow-y-auto max-h-[400px] p-4 w-full latex-content border bg-gray-50 rounded">${q.qText}${optionsPreview}</div>
                                 <div class="text-sm text-gray-800 overflow-y-auto max-h-32 p-3 w-full latex-content border bg-green-50 rounded"><b>Lời giải: </b>${q.sText || 'Không có lời giải'}</div>
                             </div>
                         `;
@@ -1131,7 +1188,7 @@
                 if (q.type === 'mcq') {
                     if (q.is_latex && q.q_options && q.q_options.length > 0) {
                         inputHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                            ${['A','B','C','D'].map((opt, idx) => `<button onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn flex items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors text-left"><span class="font-bold mr-3 text-lg">${opt}.</span><span class="latex-content flex-grow text-gray-800">${q.q_options[idx] || ''}</span></button>`).join('')}
+                            ${['A','B','C','D'].map((opt, idx) => `<button onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn flex items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors text-left break-words whitespace-normal"><span class="font-bold mr-3 text-lg whitespace-nowrap">${opt}.</span><span class="latex-content text-gray-800 break-words">${q.q_options[idx] || ''}</span></button>`).join('')}
                         </div><input type="hidden" id="ans-${i}">`;
                     } else {
                         inputHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">${['A','B','C','D'].map(opt => `<button onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn text-center justify-center flex font-bold text-lg p-4">${opt}</button>`).join('')}</div><input type="hidden" id="ans-${i}">`;
@@ -1140,7 +1197,7 @@
                     inputHtml = `<div class="mt-4"><input type="text" id="ans-${i}" class="input-field py-4 text-center text-lg font-bold" placeholder="Nhập đáp án của bạn..." oninput="checkSAProgress(${i}, this)"></div>`;
                 } else if (q.type === 'true_false') {
                     if (q.is_latex && q.q_options && q.q_options.length > 0) {
-                        inputHtml = `<div class="mt-4 grid grid-cols-1 gap-3">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-white hover:bg-gray-50 cursor-pointer shadow-sm transition-colors" onclick="document.getElementById('tf-${i}-${j}').click()"><div class="flex items-start mr-4"><span class="font-bold text-gray-700 mr-3 whitespace-nowrap">Ý ${label}:</span><span class="latex-content text-gray-800">${q.q_options[j] || ''}</span></div><label class="inline-flex items-center cursor-pointer flex-shrink-0"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg text-gray-700">Đúng</span></label></div>`).join('')}</div>`;
+                        inputHtml = `<div class="mt-4 grid grid-cols-1 gap-3">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-white hover:bg-gray-50 cursor-pointer shadow-sm transition-colors" onclick="document.getElementById('tf-${i}-${j}').click()"><div class="flex items-start mr-4"><span class="font-bold text-gray-700 mr-3 whitespace-nowrap">Ý ${label}:</span><span class="latex-content text-gray-800 break-words whitespace-normal">${q.q_options[j] || ''}</span></div><label class="inline-flex items-center cursor-pointer flex-shrink-0"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg text-gray-700">Đúng</span></label></div>`).join('')}</div>`;
                     } else {
                         inputHtml = `<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer shadow-sm" onclick="document.getElementById('tf-${i}-${j}').click()"><span class="font-bold text-lg uppercase">Ý ${label}</span><label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg">Đúng</span></label></div>`).join('')}</div>`;
                     }
@@ -1148,13 +1205,13 @@
 
                 let mediaHtml = '';
                 if (q.is_latex) {
-                    mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-blue-50/50 rounded-xl latex-content border border-blue-100 leading-relaxed shadow-sm flex flex-col items-center">${q.q_text}</div>`;
+                    mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-blue-50/50 rounded-xl latex-content border border-blue-100 leading-relaxed shadow-sm block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}</div>`;
                 } else {
                     mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mb-4 w-full shadow-sm">`;
                 }
 
                 const div = document.createElement('div');
-                div.className = "card transition-all duration-300"; div.id = `question-card-${i}`; 
+                div.className = "card transition-all duration-300 w-full overflow-hidden"; div.id = `question-card-${i}`; 
                 div.innerHTML = `<div class="mb-4"><span class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase mb-2 inline-block">${q.type === 'mcq' ? 'Trắc nghiệm' : q.type === 'true_false' ? 'Đúng/Sai' : 'Tự luận'}</span><h4 class="font-bold text-gray-800 text-xl">Câu ${i + 1}</h4></div>${mediaHtml}${inputHtml}`;
                 container.appendChild(div);
             });
@@ -1303,10 +1360,10 @@
                                 if (q.type === 'mcq') {
                                     optionsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">${['A','B','C','D'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2">${opt}.</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
                                 } else if (q.type === 'true_false') {
-                                    optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
+                                    optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
                                 }
                             }
-                            mediaHtml = `<div class="text-gray-800 text-base mb-2 p-4 bg-white rounded latex-content border border-gray-200 flex flex-col items-center">${q.q_text}</div>${optionsHtml}`;
+                            mediaHtml = `<div class="text-gray-800 text-base mb-2 p-4 bg-white rounded latex-content border border-gray-200 block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}</div>${optionsHtml}`;
                             if (q.s_text) mediaHtml += `<div class="text-gray-800 text-sm p-4 bg-green-50/50 rounded latex-content border border-green-200 mt-4"><b>Lời giải:</b><br>${q.s_text}</div>`;
                         } else {
                             mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-32 object-contain my-2">${q.da_img_data ? `<img src="data:image/png;base64,${q.da_img_data}" class="max-h-40 border rounded mt-1">` : ''}`;
