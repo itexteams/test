@@ -12,6 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <!-- Chart.js for visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- QRCode.js để tạo mã QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <!-- MathJax for LaTeX Rendering -->
     <script>
@@ -273,7 +275,7 @@
                     <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Vào Thi</h2>
                     <div class="space-y-4">
                         <input type="text" id="s-exam-id" class="input-field text-center text-xl tracking-widest uppercase border-gray-300" placeholder="NHẬP MÃ ĐỀ">
-                        <button onclick="checkExam()" class="btn w-full py-3 text-lg bg-primary hover:bg-primary-hover shadow-md">Kiểm Tra Mã Đề</button>
+                        <button id="btn-check-exam" onclick="checkExam()" class="btn w-full py-3 text-lg bg-primary hover:bg-primary-hover shadow-md">Kiểm Tra Mã Đề</button>
                     </div>
                 </div>
 
@@ -312,7 +314,6 @@
                     <h2 class="text-3xl font-bold text-primary mb-2">🎉 Hoàn Thành!</h2>
                     <p class="text-gray-600 mb-6">Bạn đã nộp bài thành công.</p>
                     
-                    <!-- SỬA LỖI Ở ĐÂY: Thêm 'hidden' mặc định vào khối điểm số -->
                     <div id="score-display-box" class="hidden bg-yellow-50 p-6 rounded-xl border-2 border-yellow-400 inline-block mb-8">
                         <p class="text-sm text-gray-500 uppercase font-semibold">Tổng Điểm</p>
                         <p id="final-score" class="text-6xl font-extrabold text-gray-800 mt-2">0.00</p>
@@ -425,6 +426,18 @@
                     document.getElementById('user-info').innerText = `ID: ${userId.substring(0,6)}...`;
                     document.getElementById('loading').classList.add('hidden');
                     document.getElementById('main-content').classList.remove('hidden');
+
+                    // ----- TỰ ĐỘNG KIỂM TRA MÃ TỪ QR CODE BẰNG URL PARAMS -----
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const examFromUrl = urlParams.get('exam');
+                    if (examFromUrl) {
+                        document.getElementById('role-selection').classList.add('hidden');
+                        document.getElementById('student-view').classList.remove('hidden');
+                        document.getElementById('s-exam-id').value = examFromUrl;
+                        
+                        // Tự động gọi hàm check mã sau khi tải xong
+                        setTimeout(() => { window.checkExam(); }, 300);
+                    }
                 }
             });
         } else {
@@ -1225,11 +1238,32 @@
                 await Promise.all(writePromises);
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', examId), { results: [] });
 
+                // ----- TẠO MÃ QR HIỂN THỊ LÊN MÀN HÌNH -----
+                const examLink = window.location.origin + window.location.pathname + "?exam=" + examId;
+                
                 customAlert(`
-                    <p class="mb-3">✅ Tạo Ngân hàng và Mã đề thành công!</p>
-                    <p class="text-xl font-extrabold text-primary p-3 bg-gray-100 rounded-lg border">MÃ ĐỀ: ${examId}</p>
-                    <p class="mt-3 text-sm text-gray-500">Đề sẽ bốc ngẫu nhiên ${totalPick} câu cho mỗi học sinh.</p>
-                `, "THÀNH CÔNG", () => location.reload());
+                    <p class="mb-2 font-semibold">✅ Tạo Ngân hàng và Mã đề thành công!</p>
+                    <p class="text-xl font-extrabold text-primary p-2 bg-gray-100 rounded-lg border mb-3">MÃ ĐỀ: ${examId}</p>
+                    
+                    <div class="flex flex-col items-center bg-blue-50 p-3 rounded-xl border border-blue-200">
+                        <p class="text-sm font-bold text-blue-800 mb-2">Mã QR cho học sinh vào thi:</p>
+                        <div id="qr-code-container" class="bg-white p-2 rounded-lg shadow-sm"></div>
+                        <p class="text-xs text-blue-600 mt-2 text-center break-all w-full font-mono">${examLink}</p>
+                    </div>
+                    
+                    <p class="mt-3 text-xs text-gray-500">Đề sẽ bốc ngẫu nhiên ${totalPick} câu cho mỗi học sinh.</p>
+                `, "THÀNH CÔNG", () => { window.location.href = window.location.pathname; });
+
+                setTimeout(() => {
+                    new QRCode(document.getElementById("qr-code-container"), {
+                        text: examLink,
+                        width: 160,
+                        height: 160,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                }, 100);
 
             } catch (e) { customAlert(e.message, "Lỗi Lưu Đề Thi"); btn.disabled = false; btn.innerText = "💾 LƯU & TẠO MÃ ĐỀ NGẪU NHIÊN"; }
         }
@@ -1239,7 +1273,9 @@
             if (!isFirebaseConfigured()) return customAlert("Lỗi: Firebase chưa được cấu hình.");
             const examId = document.getElementById('s-exam-id').value.trim().toUpperCase();
             if (!examId) return customAlert("Vui lòng nhập mã đề");
-            const btn = event.target; btn.innerText = "Đang kiểm tra..."; btn.disabled = true;
+            
+            const btn = document.getElementById('btn-check-exam'); 
+            if (btn) { btn.innerText = "Đang kiểm tra..."; btn.disabled = true; }
 
             try {
                 const docSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_exams', examId));
@@ -1285,8 +1321,12 @@
                     ${attemptMsg}
                 `;
 
-            } catch (e) { customAlert(e.message, "KHÔNG THỂ VÀO THI"); } 
-            finally { btn.disabled = false; btn.innerText = "Kiểm Tra Mã Đề"; }
+            } catch (e) { 
+                customAlert(e.message, "KHÔNG THỂ VÀO THI"); 
+            } 
+            finally { 
+                if (btn) { btn.disabled = false; btn.innerText = "Kiểm Tra Mã Đề"; } 
+            }
         }
 
         window.startExam = async (event) => {
