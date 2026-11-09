@@ -14,13 +14,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- QRCode.js để tạo mã QR -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- PDF.js để đọc PDF biên dịch từ LaTeX và cắt ảnh PNG tự động -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
-        if (window.pdfjsLib) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        }
-    </script>
 
     <!-- MathJax for LaTeX Rendering -->
     <script>
@@ -178,21 +171,14 @@
                     </div>
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
-                        <h3 class="text-lg font-bold text-purple-800 mb-2 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Hỗ trợ biên dịch PDF $\rightarrow$ Cắt Ảnh + SVG v3.0)
+                        <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Chế Độ Đồ Thị OFFLINE)
                         </h3>
                         <p class="text-xs text-purple-700 mb-3">
-                            - <b>Hỗ trợ 100% hình TikZ:</b> Hình vẽ Mathcha (cây cối, vật thể thực tế), GeoGebra, `tkz-tab`, `tkz-euclide`, đồ thị hàm số.<br>
-                            - <b>Cơ chế Kép:</b> Vẽ SVG trực tiếp siêu tốc VÀ tự động biên dịch LaTeX sang PDF rồi cắt lấy ảnh PNG chuẩn xác!
+                            - <b>KHÔNG CẦN MẠNG NGOÀI:</b> Hệ thống sẽ phân tích hàm số và tọa độ TikZ trực tiếp bằng JavaScript để vẽ đồ thị vector (SVG) ngay trên máy bạn.<br>
+                            - Siêu mượt, không bao giờ lo lỗi Server!
                         </p>
-                        <div class="flex flex-wrap items-center gap-4 mb-3 bg-white p-3 rounded-lg border border-purple-200 text-sm">
-                            <label class="inline-flex items-center cursor-pointer font-semibold text-purple-900">
-                                <input type="checkbox" id="use-pdf-crop" class="w-4 h-4 text-purple-600 rounded mr-2" checked>
-                                Tự động biên dịch LaTeX ra PDF rồi cắt lấy hình ảnh PNG (Chuẩn PDF 100%, nếu mất mạng tự dùng SVG v3.0)
-                            </label>
-                        </div>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
-                        <div id="latex-compile-status" class="hidden mt-2 text-xs font-semibold text-purple-700 bg-purple-100 px-3 py-2 rounded-lg"></div>
                         <div class="mt-4 text-right">
                             <button onclick="processLatexEntry(this)" class="btn bg-purple-600 hover:bg-purple-700 shadow-md">✍️ Phân Tích & Thêm Vào Ngân Hàng</button>
                         </div>
@@ -462,12 +448,15 @@
                     document.getElementById('loading').classList.add('hidden');
                     document.getElementById('main-content').classList.remove('hidden');
 
+                    // ----- TỰ ĐỘNG KIỂM TRA MÃ TỪ QR CODE BẰNG URL PARAMS -----
                     const urlParams = new URLSearchParams(window.location.search);
                     const examFromUrl = urlParams.get('exam');
                     if (examFromUrl) {
                         document.getElementById('role-selection').classList.add('hidden');
                         document.getElementById('student-view').classList.remove('hidden');
                         document.getElementById('s-exam-id').value = examFromUrl;
+                        
+                        // Tự động gọi hàm check mã sau khi tải xong
                         setTimeout(() => { window.checkExam(); }, 300);
                     }
                 }
@@ -579,122 +568,16 @@
             });
         }
 
-        /* =====================================================================
-           CƠ CHẾ 1: BIÊN DỊCH LATEX -> PDF -> CẮT HÌNH ẢNH PNG TỰ ĐỘNG
-           Đóng gói khối TikZ vào tài liệu standalone LaTeX, gọi trình biên dịch
-           pdflatex để xuất ra PDF thật, sau đó dùng PDF.js render và auto-crop
-           sát viền thành ảnh PNG Base64 sắc nét.
-           ===================================================================== */
-        const autoCropCanvas = (canvas) => {
-            const ctx = canvas.getContext('2d');
-            const w = canvas.width, h = canvas.height;
-            const imgData = ctx.getImageData(0, 0, w, h).data;
-            let top = h, left = w, right = 0, bottom = 0, found = false;
-
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const i = (y * w + x) * 4;
-                    const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2], a = imgData[i + 3];
-                    // Điểm không phải màu trắng tinh hoặc trong suốt
-                    if (a > 10 && (r < 250 || g < 250 || b < 250)) {
-                        if (x < left) left = x;
-                        if (x > right) right = x;
-                        if (y < top) top = y;
-                        if (y > bottom) bottom = y;
-                        found = true;
-                    }
-                }
-            }
-            if (!found) return canvas.toDataURL('image/png');
-            const pad = 14;
-            left = Math.max(0, left - pad);
-            top = Math.max(0, top - pad);
-            right = Math.min(w - 1, right + pad);
-            bottom = Math.min(h - 1, bottom + pad);
-            const cw = right - left + 1, ch = bottom - top + 1;
-            const out = document.createElement('canvas');
-            out.width = cw; out.height = ch;
-            const outCtx = out.getContext('2d');
-            outCtx.fillStyle = '#ffffff';
-            outCtx.fillRect(0, 0, cw, ch);
-            outCtx.drawImage(canvas, left, top, cw, ch, 0, 0, cw, ch);
-            return out.toDataURL('image/png');
-        };
-
-        const compileTikZToPDFImage = async (tikzCode) => {
-            if (!window.pdfjsLib) return null;
-            const fullLatexDoc = `\\documentclass[tikz,border=4pt]{standalone}
-\\usepackage[utf8]{inputenc}
-\\usepackage[T5]{fontenc}
-\\usepackage{amsmath,amssymb,amsfonts}
-\\usepackage{tikz,pgfplots,tkz-tab,tkz-euclide}
-\\pgfplotsset{compat=1.18}
-\\usetikzlibrary{calc,angles,quotes,arrows,arrows.meta,intersections,patterns,backgrounds,positioning,shapes.geometric,decorations.pathmorphing,decorations.markings,shadows}
-\\begin{document}
-${tikzCode}
-\\end{document}`;
-
-            const endpoints = [
-                'https://texlive.net/cgi-bin/latexcgi',
-                'https://agn.eb.mil.br/latexcgi'
-            ];
-
-            for (const url of endpoints) {
-                try {
-                    const fd = new FormData();
-                    fd.append('filecontents[]', fullLatexDoc);
-                    fd.append('filename[]', 'document.tex');
-                    fd.append('engine', 'pdflatex');
-                    fd.append('return', 'pdf');
-
-                    const ctrl = new AbortController();
-                    const timer = setTimeout(() => ctrl.abort(), 12000);
-                    const res = await fetch(url, { method: 'POST', body: fd, signal: ctrl.signal });
-                    clearTimeout(timer);
-
-                    if (!res.ok) continue;
-                    const ctype = (res.headers.get('content-type') || '').toLowerCase();
-                    const buf = await res.arrayBuffer();
-                    const head = new Uint8Array(buf.slice(0, 5));
-                    const isPdf = String.fromCharCode(...head) === '%PDF-';
-                    if (!isPdf && !ctype.includes('pdf')) continue;
-
-                    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-                    const page = await pdf.getPage(1);
-                    const viewport = page.getViewport({ scale: 2.5 });
-                    const canvas = document.createElement('canvas');
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    await page.render({ canvasContext: ctx, viewport }).promise;
-                    return autoCropCanvas(canvas);
-                } catch (e) {
-                    console.warn('Thử endpoint biên dịch PDF tiếp theo...', e);
-                }
-            }
-            return null;
-        };
-
-        /* =====================================================================
-           CƠ CHẾ 2: iTeX TikZ ENGINE v3.0 (HỖ TRỢ MATHCHA, GEOGEBRA, TKZ-EUCLIDE)
-           - Giải quyết triệt để lỗi dấu chấm phẩy ';' trong {rgb, 255:red, ...; green, ...}
-           - Hỗ trợ [x=0.75pt, y=0.75pt, yscale=-1, xscale=1] của Mathcha
-           - Hỗ trợ chuỗi đường cong Bézier nối tiếp (.. controls ..) không cần '--'
-           ===================================================================== */
+        /* ----- HỖ TRỢ LATEX PARSER & TKZ-TAB & ĐỒ THỊ TIKZ (JS RENDERER) ----- */
+        
         window.extractBalanced = (str, keyword) => {
             const idx = str.indexOf(keyword);
             if (idx === -1) return null;
             let start = idx + keyword.length;
             while (start < str.length && /\s/.test(str[start])) start++;
             if (str[start] === '[') {
-                let b = 0;
-                while (start < str.length) {
-                    if (str[start] === '[') b++;
-                    else if (str[start] === ']') { b--; if (b === 0) { start++; break; } }
-                    start++;
-                }
+                while (start < str.length && str[start] !== ']') start++;
+                start++;
             }
             while (start < str.length && /\s/.test(str[start])) start++;
             if (str[start] !== '{') return null;
@@ -746,11 +629,8 @@ ${tikzCode}
             let idx = text.indexOf('\\scalebox');
             while(idx !== -1) {
                 let paramStart = text.indexOf('{', idx);
-                if (paramStart === -1) break;
                 let paramEnd = text.indexOf('}', paramStart);
-                if (paramEnd === -1) break;
                 let contentStart = text.indexOf('{', paramEnd + 1);
-                if (contentStart === -1) break;
                 
                 let braces = 0; let contentEnd = -1;
                 for(let i = contentStart; i < text.length; i++) {
@@ -846,591 +726,207 @@ ${tikzCode}
             }
         };
 
-        const TZ_S = 40; // Mặc định 1cm = 40px
-        const TZ_COL = {red:'#dc2626',blue:'#2563eb',green:'#16a34a',black:'#111',gray:'#6b7280',orange:'#f97316',purple:'#9333ea',brown:'#92400e',cyan:'#06b6d4',magenta:'#d946ef',yellow:'#eab308',white:'#fff',darkgray:'#374151',lightgray:'#d1d5db',teal:'#0d9488',violet:'#7c3aed',pink:'#ec4899',lime:'#84cc16',olive:'#65a30d'};
-
-        const tzSplitTop = (s, sep) => {
-            const out = []; let d = 0, cur = '';
-            for (const c of s) {
-                if ('([{'.includes(c)) d++; else if (')]}'.includes(c)) d--;
-                if (c === sep && d === 0) { out.push(cur); cur = ''; } else cur += c;
-            }
-            out.push(cur); return out;
-        };
-
-        const tzNum = (s, env = {}, rad = false) => {
-            s = String(s).trim().replace(/[{}]/g, '');
-            if (/^-?[\d.]+pt$/.test(s)) return parseFloat(s) / 28.45;
-            if (/^-?[\d.]+mm$/.test(s)) return parseFloat(s) / 10;
-            s = s.replace(/cm\b/g, '').replace(/deg\(([^)]+)\)/g, '(($1)*180/pi)')
-                 .replace(/\\([a-zA-Z]+)/g, (m, n) => n === 'pi' ? 'pi' : (env[n] !== undefined ? '(' + env[n] + ')' : 'NaN'))
-                 .replace(/--/g, '+').replace(/\^/g, '**');
-            const k = rad ? 1 : Math.PI / 180;
-            try {
-                return new Function('sin', 'cos', 'tan', 'sqrt', 'abs', 'exp', 'ln', 'pi', 'veclen', 'return ' + s)(
-                    x => Math.sin(x * k), x => Math.cos(x * k), x => Math.tan(x * k), Math.sqrt, Math.abs, Math.exp, Math.log, Math.PI, Math.hypot);
-            } catch (e) { return NaN; }
-        };
-
-        const tzPt = (c, st) => {
-            c = c.trim(); let m;
-            if (c.startsWith('canvas cs:') || c.startsWith('axis cs:')) c = c.replace(/^(?:canvas|axis)\s+cs:/, '').trim();
-            if (c.includes('x=') && c.includes('y=')) {
-                const mx = c.match(/x\s*=\s*([^,]+)/), my = c.match(/y\s*=\s*([^,]+)/);
-                if (mx && my) return [tzNum(mx[1], st.env), tzNum(my[1], st.env)];
-            }
-            if (c[0] === '$') {
-                c = c.replace(/\$/g, '').trim();
-                if ((m = c.match(/^\(([^)]+)\)!([^!]+)!\(([^)]+)\)$/))) {
-                    const a = tzPt(m[1], st), b = tzPt(m[3], st);
-                    const parts = m[2].split(':');
-                    const t = tzNum(parts[0], st.env);
-                    const ang = parts[1] ? tzNum(parts[1], st.env) * Math.PI / 180 : 0;
-                    if (!a || !b) return null;
-                    const dx = b[0] - a[0], dy = b[1] - a[1];
-                    const rx = dx * Math.cos(ang) - dy * Math.sin(ang);
-                    const ry = dx * Math.sin(ang) + dy * Math.cos(ang);
-                    return [a[0] + t * rx, a[1] + t * ry];
-                }
-                let x = 0, y = 0, ok = false; const re = /([+-])?\s*(?:([\d.]+)\s*\*\s*)?\(([^()]*)\)/g;
-                while ((m = re.exec(c))) {
-                    const p = tzPt(m[3], st); if (!p) return null;
-                    const f = (m[1] === '-' ? -1 : 1) * (m[2] ? parseFloat(m[2]) : 1);
-                    x += f * p[0]; y += f * p[1]; ok = true;
-                }
-                return ok ? [x, y] : null;
-            }
-            if (st.pts[c]) return st.pts[c];
-            if (c.includes('|-')) {
-                const [p1, p2] = c.split('|-').map(x => tzPt(x.trim(), st));
-                return p1 && p2 ? [p1[0], p2[1]] : null;
-            }
-            if (c.includes('-|')) {
-                const [p1, p2] = c.split('-|').map(x => tzPt(x.trim(), st));
-                return p1 && p2 ? [p2[0], p1[1]] : null;
-            }
-            if (c.includes(',')) { const p = tzSplitTop(c, ','); const v = [tzNum(p[0], st.env), tzNum(p[1], st.env)]; return v.some(isNaN) ? null : v; }
-            if (c.includes(':')) { const p = c.split(':'); const a = tzNum(p[0], st.env), r = tzNum(p[1], st.env);
-                return isNaN(a) || isNaN(r) ? null : [r * Math.cos(a * Math.PI / 180), r * Math.sin(a * Math.PI / 180)]; }
-            return null;
-        };
-
-        const tzLabel = (t) => {
-            const G = {alpha:'α',beta:'β',gamma:'γ',delta:'δ',theta:'θ',varphi:'φ',phi:'ϕ',pi:'π',omega:'ω',Delta:'Δ',Omega:'Ω',infty:'∞',pm:'±',mp:'∓',cdot:'·',times:'×',le:'≤',ge:'≥',neq:'≠',approx:'≈'};
-            t = t.replace(/\$/g, '').replace(/\\(?:mathrm|text|mathbf|textit|mathit)\{([^}]*)\}/g, '$1')
-                 .replace(/\\vec\{([^}]*)\}/g, '$1⃗').replace(/\\overrightarrow\{([^}]*)\}/g, '$1⃗')
-                 .replace(/\\sqrt\{([^}]*)\}/g, '√($1)')
-                 .replace(/\\(?:d|t)?frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1/$2)')
-                 .replace(/\\(alpha|beta|gamma|delta|theta|varphi|phi|pi|omega|Delta|Omega|infty|pm|mp|cdot|times|le|ge|neq|approx)\b/g, (m, g) => G[g] || m)
-                 .replace(/\\circ/g, '°').replace(/\\[,;! ]/g, ' ').replace(/\\(ldots|dots|cdots)/g, '…');
-            t = t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
-                 .replace(/_\{?([^}\s^_]+)\}?/g, '<tspan baseline-shift="sub" font-size="75%">$1</tspan>')
-                 .replace(/\^\{?([^}\s^_]+)\}?/g, '<tspan baseline-shift="super" font-size="75%">$1</tspan>');
-            return t.replace(/[{}]/g, '');
-        };
-
-        /* Giải mã màu của TikZ & Mathcha: hỗ trợ cả {rgb, 255:red, 65; green, 117; blue, 5} */
-        const tzParseColor = (s) => {
-            if (!s) return '#111';
-            s = s.trim();
-            const rgbM = s.match(/red\s*,\s*(\d+)\s*[;,]?\s*green\s*,\s*(\d+)\s*[;,]?\s*blue\s*,\s*(\d+)/i);
-            if (rgbM) return `rgb(${rgbM[1]},${rgbM[2]},${rgbM[3]})`;
-            const base = s.replace(/[{}]/g, '').split('!')[0].trim();
-            return TZ_COL[base] || '#111';
-        };
-
-        const tzStyle = (opts, kind) => {
-            // Gộp các khối [...][...] liền nhau (đặc trưng của Mathcha)
-            const o = (opts || '').replace(/\]\s*\[/g, ',').replace(/^\[|\]$/g, '');
-            const toks = tzSplitTop(o, ',').map(s => s.trim()).filter(Boolean);
-            const val = k => {
-                for (const t of toks) {
-                    const m = t.match(new RegExp('^' + k + '\\s*=\\s*([\\s\\S]+)$'));
-                    if (m) return m[1].trim();
-                }
-                return null;
-            };
-            let stroke = kind === 'fill' ? 'none' : (kind === 'path' ? 'none' : '#111');
-            let fill = kind === 'fill' ? '#111' : 'none';
-            let w = 1.35, extra = '', ms = '', me = '';
-
-            toks.forEach(t => {
-                if (!t.includes('=')) {
-                    const b = t.split('!')[0].trim();
-                    if (TZ_COL[b]) {
-                        if (kind === 'fill' || kind === 'filldraw') fill = TZ_COL[b];
-                        if (kind !== 'fill') stroke = TZ_COL[b];
-                    }
-                }
-            });
-            if (kind === 'filldraw') fill = val('fill') ? tzParseColor(val('fill')) : (fill === 'none' ? '#d1d5db' : fill);
-            if (val('fill')) fill = tzParseColor(val('fill'));
-            if (val('draw')) stroke = val('draw') === 'none' ? 'none' : tzParseColor(val('draw'));
-            else if (kind === 'path' && toks.includes('draw')) stroke = '#111';
-            if (val('color')) {
-                const c = tzParseColor(val('color'));
-                if (stroke !== 'none') stroke = c;
-                if (kind === 'fill') fill = c;
-            }
-            if (val('draw opacity')) {
-                const dop = parseFloat(val('draw opacity'));
-                if (dop === 0) stroke = 'none';
-                else extra += ` stroke-opacity="${dop}"`;
-            }
-            if (val('fill opacity')) extra += ` fill-opacity="${val('fill opacity')}"`;
-            else if (val('opacity')) extra += ` opacity="${val('opacity')}"`;
-            else if (kind === 'fill' || kind === 'filldraw') {
-                const bang = toks.find(t => t.includes('!') && !t.includes('='));
-                if (bang) { const p = parseFloat(bang.split('!')[1]); if (!isNaN(p)) extra += ` fill-opacity="${(p/100).toFixed(2)}"`; }
-            }
-            if (toks.some(t => /^(very thick|ultra thick)$/.test(t))) w = 2.6;
-            else if (toks.includes('thick') || toks.includes('semithick')) w = 1.8;
-            else if (toks.includes('thin') || toks.includes('very thin')) w = 0.8;
-            if (val('line width')) w = parseFloat(val('line width')) * 1.15;
-            if (toks.some(t => /dashed|loosely dashed|densely dashed/.test(t))) extra += ' stroke-dasharray="6 4"';
-            if (toks.some(t => /dotted|loosely dotted|densely dotted/.test(t))) extra += ' stroke-dasharray="1.5 3.5"';
-            const ar = toks.find(t => /^[<\-\]>|stealthlatex]*-[>\]|stealthlatex<]*$/.test(t) && t.includes('-') && /[<>]|stealth|latex/.test(t));
-            if (ar) { if (ar[0] === '<' || /^stealth-|^latex-/.test(ar)) ms = ' marker-start="url(#tzA2)"'; if (/[>]$|stealth$|latex$/.test(ar)) me = ' marker-end="url(#tzA)"'; }
-            return `fill="${fill}" stroke="${stroke}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${extra}${ms}${me}`;
-        };
-
-        const tzExpandForeach = (s) => {
-            let guard = 0;
-            while (s.includes('\\foreach') && guard++ < 60) {
-                const i = s.lastIndexOf('\\foreach'); const h = s.slice(i).match(/^\\foreach\s+((?:\\[a-zA-Z]+\s*(?:\/\s*)?)+)\s*(?:\[[^\]]*\])?\s*in\s*/);
-                if (!h) break; let j = i + h[0].length, list, end;
-                if (s[j] === '{') { let d = 0, k = j; for (; k < s.length; k++) { if (s[k] === '{') d++; else if (s[k] === '}' && --d === 0) break; } list = s.slice(j + 1, k); j = k + 1; }
-                else { const k = s.indexOf(' ', j); list = s.slice(j, k); j = k; }
-                while (/\s/.test(s[j])) j++;
-                let body;
-                if (s[j] === '{') { let d = 0, k = j; for (; k < s.length; k++) { if (s[k] === '{') d++; else if (s[k] === '}' && --d === 0) break; } body = s.slice(j + 1, k); end = k + 1; }
-                else { const k = s.indexOf(';', j); body = s.slice(j, k + 1); end = k + 1; }
-                let items = tzSplitTop(list, ',').map(x => x.trim()).filter(Boolean);
-                const di = items.indexOf('...') >= 0 ? items.indexOf('...') : items.findIndex(x => /^\\?(?:ldots|dots)$/.test(x));
-                if (di > 0 && items[di + 1] !== undefined) {
-                    const a = parseFloat(items[0]), z = parseFloat(items[di + 1]);
-                    const step = di >= 2 ? parseFloat(items[1]) - a : (z >= a ? 1 : -1); items = [];
-                    if (step !== 0 && !isNaN(step)) {
-                        for (let v = a; step > 0 ? v <= z + 1e-9 : v >= z - 1e-9; v += step) items.push(String(+v.toFixed(6)));
-                    }
-                }
-                const vars = h[1].split('/').map(v => v.replace('\\', '').trim()).filter(Boolean); let res = '';
-                items.forEach(it => { const parts = it.split('/'); let b = body; vars.forEach((v, n) => { b = b.replace(new RegExp('\\\\' + v + '(?![a-zA-Z])', 'g'), parts[n] !== undefined ? parts[n].trim() : parts[0].trim()); }); res += b + ' '; });
-                s = s.slice(0, i) + res + s.slice(end);
-            }
-            return s;
-        };
-
-        const tzDirAnchor = (pos) => {
-            let dx = 0, dy = 0, a = 'middle'; const d = 12;
-            if (/anchor\s*=\s*north\s+west/.test(pos)) return { dx: 8, dy: 10, a: 'start' };
-            if (/anchor\s*=\s*north\s+east/.test(pos)) return { dx: -8, dy: 10, a: 'end' };
-            if (/anchor\s*=\s*south\s+west/.test(pos)) return { dx: 8, dy: -8, a: 'start' };
-            if (/anchor\s*=\s*south\s+east/.test(pos)) return { dx: -8, dy: -8, a: 'end' };
-            if (/below/.test(pos)) dy = d; if (/above/.test(pos)) dy = -d;
-            if (/left/.test(pos)) { dx = -d; a = 'end'; } if (/right/.test(pos)) { dx = d; a = 'start'; }
-            const angM = pos.match(/(?:^|,)\s*(-?\d+(?:\.\d+)?)\s*(?:,|$)/);
-            if (angM && dx === 0 && dy === 0) {
-                const rad = parseFloat(angM[1]) * Math.PI / 180;
-                dx = d * Math.cos(rad); dy = -d * Math.sin(rad);
-            }
-            return { dx, dy, a };
-        };
-
         const parseTikZGraphToSVG = (tikzStr) => {
             try {
-                // Đọc hệ số tỉ lệ và đơn vị (bao gồm cả x=0.75pt, y=0.75pt, yscale=-1 của Mathcha)
-                let sx = TZ_S, sy = -TZ_S;
-                const headerM = tikzStr.match(/\\begin\{tikzpicture\}\s*\[([\s\S]*?)\]/);
-                if (headerM) {
-                    const hOpts = headerM[1];
-                    const xUnitM = hOpts.match(/(?:^|,)\s*x\s*=\s*([\d.]+)\s*(pt|cm|mm)?/);
-                    const yUnitM = hOpts.match(/(?:^|,)\s*y\s*=\s*([\d.]+)\s*(pt|cm|mm)?/);
-                    if (xUnitM) {
-                        const val = parseFloat(xUnitM[1]), u = xUnitM[2] || 'cm';
-                        sx = u === 'pt' ? val * 1.333 : (u === 'mm' ? val * 4 : val * TZ_S);
+                let xMin = -4, xMax = 4, yMin = -4, yMax = 4;
+                const clipMatch = tikzStr.match(/\\clip\s*\(([^,]+),([^)]+)\)\s*rectangle\s*\(([^,]+),([^)]+)\)/);
+                if (clipMatch) {
+                    xMin = parseFloat(clipMatch[1]); yMin = parseFloat(clipMatch[2]);
+                    xMax = parseFloat(clipMatch[3]); yMax = parseFloat(clipMatch[4]);
+                } else {
+                    const axesRegex = /\\draw\[->\]\s*\(([^,]+),([^)]+)\)\s*--\s*\(([^,]+),([^)]+)\)/g;
+                    let m;
+                    while((m = axesRegex.exec(tikzStr))) {
+                        let v1 = parseFloat(m[1]), v2 = parseFloat(m[2]), v3 = parseFloat(m[3]), v4 = parseFloat(m[4]);
+                        if (v2 === 0 && v4 === 0) { xMin = v1; xMax = v3; }
+                        if (v1 === 0 && v3 === 0) { yMin = v2; yMax = v4; }
                     }
-                    if (yUnitM) {
-                        const val = parseFloat(yUnitM[1]), u = yUnitM[2] || 'cm';
-                        sy = -(u === 'pt' ? val * 1.333 : (u === 'mm' ? val * 4 : val * TZ_S));
-                    }
-                    const scaleM = hOpts.match(/(?:^|,)\s*scale\s*=\s*(-?[\d.]+)/);
-                    if (scaleM) { sx *= parseFloat(scaleM[1]); sy *= parseFloat(scaleM[1]); }
-                    const xscaleM = hOpts.match(/xscale\s*=\s*(-?[\d.]+)/);
-                    if (xscaleM) sx *= parseFloat(xscaleM[1]);
-                    const yscaleM = hOpts.match(/yscale\s*=\s*(-?[\d.]+)/);
-                    if (yscaleM) sy *= parseFloat(yscaleM[1]);
                 }
+                
+                let pX = (xMax - xMin) * 0.05 || 0.5; 
+                let pY = (yMax - yMin) * 0.05 || 0.5;
+                xMin -= pX; xMax += pX; yMin -= pY; yMax += pY;
 
-                const S = Math.abs(sx);
-                const B = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
-                const st = { pts: {}, env: {}, items: [], texts: [], last: null };
-                const bb = (x, y) => { if (!isFinite(x) || !isFinite(y)) return; B.x0 = Math.min(B.x0, x); B.x1 = Math.max(B.x1, x); B.y0 = Math.min(B.y0, y); B.y1 = Math.max(B.y1, y); };
-                const bbp = p => bb(p[0] * sx, p[1] * sy);
-                const X = v => (v * sx).toFixed(2), Y = v => (v * sy).toFixed(2);
+                const W = 350, H = 300;
+                const mapX = (x) => ((x - xMin) / (xMax - xMin)) * W;
+                const mapY = (y) => H - ((y - yMin) / (yMax - yMin)) * H;
 
-                let src = tikzStr.replace(/\\begin\{tikzpicture\}(\[[\s\S]*?\])?/, '').replace(/\\end\{tikzpicture\}/, '').replace(/(^|[^\\])%.*$/gm, '$1');
-                src = src.replace(/\\(?:def|newcommand\{?)\s*\\([a-zA-Z]+)\}?\s*\{([^{}]*)\}/g, (m, n, v) => { const val = tzNum(v, st.env); st.env[n] = isNaN(val) ? v : val; return ''; })
-                         .replace(/\\pgfmathsetmacro\s*\{?\\([a-zA-Z]+)\}?\s*\{([^{}]*)\}/g, (m, n, v) => { const val = tzNum(v, st.env); st.env[n] = isNaN(val) ? v : val; return ''; })
-                         .replace(/\\(?:tikzset|usetikzlibrary|usepgflibrary|tkzInit|tkzClip|tkzSetUpPoint|tkzSetUpLine|tkzSetUpStyle|clip|useasboundingbox)[^;\n]*[;\n]?/g, ' ')
-                         .replace(/\\begin\{scope\}(\[[^\]]*\])?|\\end\{scope\}/g, ' ');
-                src = tzExpandForeach(src).replace(/\\tkz/g, ';\\tkz');
+                let svg = `<div class="w-full flex justify-center my-4"><svg viewBox="0 0 ${W} ${H}" class="max-w-[350px] w-full h-auto bg-white rounded-lg p-2 font-math" style="overflow: visible;">`;
+                svg += `<defs><marker id="arrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/></marker></defs>`;
 
-                const renderNode = (p, no, nm, txt) => {
-                    if (!p) return;
-                    if (nm) st.pts[nm.trim()] = p;
-                    if (/fill\s*=|circle/.test(no) && /inner sep/.test(no) && !txt.trim()) {
-                        st.items.push(`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="2.5" fill="#111"/>`);
-                        bbp(p);
-                    }
-                    if (!txt || !txt.trim()) return;
-                    const an = tzDirAnchor(no);
-                    const colM = no.split(',').map(s => s.trim()).find(t => TZ_COL[t.split('!')[0]]);
-                    const px = p[0] * sx + an.dx, py = p[1] * sy + an.dy;
-                    st.texts.push(`<text x="${px.toFixed(1)}" y="${py.toFixed(1)}" text-anchor="${an.a}" dominant-baseline="middle" font-family="Times New Roman,serif" font-size="15" font-style="italic" fill="${colM ? TZ_COL[colM.split('!')[0]] : '#111'}">${tzLabel(txt)}</text>`);
-                    bb(px - 14, py - 10); bb(px + 14, py + 10);
+                const cleanVal = (v) => {
+                    v = v.trim();
+                    if(v.includes('pt')) return parseFloat(v.replace('pt','')) * 0.05; 
+                    try { return new Function('return ' + v.replace(/\\pi/g, 'Math.PI'))(); } catch(e){ return parseFloat(v); }
                 };
 
-                const drawPath = (kind, opts, rest) => {
-                    const sty = tzStyle(opts, kind); let d = '', cur = null, prevPt = null, pending = false, joinType = '--', i = 0;
-                    const bal = (o, c) => { let dep = 0, j = i; for (; j < rest.length; j++) { if (rest[j] === o) dep++; else if (rest[j] === c && --dep === 0) break; } const s = rest.slice(i + 1, j); i = j + 1; return s; };
-                    const ws = () => { while (i < rest.length && /\s/.test(rest[i])) i++; };
-                    while (i < rest.length) {
-                        const c = rest[i];
-                        if (/\s/.test(c)) { i++; continue; }
-                        if (rest.startsWith('..', i)) {
-                            i += 2; ws();
-                            if (rest.startsWith('controls', i)) {
-                                i += 8; ws();
-                                let c1 = null, c2 = null;
-                                if (rest[i] === '(' || rest.startsWith('+(', i) || rest.startsWith('++(', i)) {
-                                    let rel = 0; if (rest.startsWith('++', i)) { rel = 2; i += 2; } else if (rest[i] === '+') { rel = 1; i++; }
-                                    c1 = tzPt(bal('(', ')'), st);
-                                    if (rel && cur && c1) c1 = [cur[0] + c1[0], cur[1] + c1[1]];
-                                }
-                                ws();
-                                if (rest.startsWith('and', i)) {
-                                    i += 3; ws();
-                                    if (rest[i] === '(' || rest.startsWith('+(', i) || rest.startsWith('++(', i)) {
-                                        let rel = 0; if (rest.startsWith('++', i)) { rel = 2; i += 2; } else if (rest[i] === '+') { rel = 1; i++; }
-                                        c2 = tzPt(bal('(', ')'), st);
-                                        if (rel && cur && c2) c2 = [cur[0] + c2[0], cur[1] + c2[1]];
-                                    }
-                                }
-                                ws(); if (rest.startsWith('..', i)) i += 2; ws();
-                                if (rest[i] === '(' || rest.startsWith('+(', i) || rest.startsWith('++(', i)) {
-                                    let rel = 0; if (rest.startsWith('++', i)) { rel = 2; i += 2; } else if (rest[i] === '+') { rel = 1; i++; }
-                                    let ep = tzPt(bal('(', ')'), st);
-                                    if (rel && cur && ep) ep = [cur[0] + ep[0], cur[1] + ep[1]];
-                                    if (cur && c1 && ep) {
-                                        if (!c2) c2 = c1;
-                                        d += `C ${X(c1[0])} ${Y(c1[1])}, ${X(c2[0])} ${Y(c2[1])}, ${X(ep[0])} ${Y(ep[1])} `;
-                                        bbp(c1); bbp(c2); bbp(ep); prevPt = cur; cur = ep;
-                                    }
-                                }
-                                continue;
-                            }
-                            continue;
-                        }
-                        if (rest.startsWith('--', i) || rest.startsWith('-|', i) || rest.startsWith('|-', i)) {
-                            pending = true; joinType = rest.slice(i, i + 2); i += 2; continue;
-                        }
-                        if (rest.startsWith('cycle', i)) { d += 'Z '; i += 5; continue; }
-                        if (/^to(?![a-zA-Z])/.test(rest.slice(i))) {
-                            pending = true; joinType = '--'; i += 2; ws();
-                            if (rest[i] === '[') {
-                                const toOpts = bal('[', ']');
-                                const bendL = toOpts.match(/bend left\s*(?:=\s*(-?[\d.]+))?/);
-                                const bendR = toOpts.match(/bend right\s*(?:=\s*(-?[\d.]+))?/);
-                                if (bendL || bendR) {
-                                    joinType = bendL ? `bend:${bendL[1] || 30}` : `bend:${-(bendR[1] || 30)}`;
-                                }
-                            }
-                            continue;
-                        }
-                        if (c === '[') { bal('[', ']'); continue; }
-                        if (c === '(' || rest.startsWith('++(', i) || rest.startsWith('+(', i)) {
-                            let rel = 0; if (rest.startsWith('++', i)) { rel = 2; i += 2; } else if (c === '+') { rel = 1; i++; }
-                            const s = bal('(', ')'); let p = tzPt(s, st); if (!p) continue;
-                            if (rel && cur) p = [cur[0] + p[0], cur[1] + p[1]];
-                            bbp(p);
-                            if (pending && cur) {
-                                if (joinType === '-|') d += `L ${X(p[0])} ${Y(cur[1])} L ${X(p[0])} ${Y(p[1])} `;
-                                else if (joinType === '|-') d += `L ${X(cur[0])} ${Y(p[1])} L ${X(p[0])} ${Y(p[1])} `;
-                                else if (joinType.startsWith('bend:')) {
-                                    const ang = parseFloat(joinType.split(':')[1]) * Math.PI / 180;
-                                    const mx = (cur[0] + p[0]) / 2, my = (cur[1] + p[1]) / 2;
-                                    const dx = p[0] - cur[0], dy = p[1] - cur[1];
-                                    const k = 0.5 * Math.tan(ang);
-                                    const cx = mx - k * dy, cy = my + k * dx;
-                                    d += `Q ${X(cx)} ${Y(cy)} ${X(p[0])} ${Y(p[1])} `;
-                                    bbp([cx, cy]);
-                                } else d += `L ${X(p[0])} ${Y(p[1])} `;
-                            } else {
-                                d += `M ${X(p[0])} ${Y(p[1])} `;
-                            }
-                            prevPt = cur;
-                            if (rel !== 1) cur = p;
-                            pending = false; joinType = '--'; continue;
-                        }
-                        const kw = rest.slice(i).match(/^(circle|ellipse|arc|rectangle|grid|coordinate|node|plot)(?![a-zA-Z])/);
-                        if (kw && cur !== undefined) {
-                            i += kw[0].length; ws();
-                            if (kw[1] === 'coordinate') {
-                                if (rest[i] === '[') bal('[', ']'); ws();
-                                if (rest[i] === '(') { const nm = bal('(', ')'); if (cur) st.pts[nm.trim()] = cur; }
-                            } else if (kw[1] === 'circle' || kw[1] === 'ellipse') {
-                                let rx, ry;
-                                if (rest[i] === '[') {
-                                    const o = bal('[', ']');
-                                    const xR = o.match(/x\s*radius\s*=\s*([^,\]]+)/), yR = o.match(/y\s*radius\s*=\s*([^,\]]+)/), rM = o.match(/radius\s*=\s*([^,\]]+)/);
-                                    rx = xR ? tzNum(xR[1], st.env) : (rM ? tzNum(rM[1], st.env) : 1);
-                                    ry = yR ? tzNum(yR[1], st.env) : rx;
-                                } else {
-                                    const q = bal('(', ')').split(/\s+and\s+/); rx = tzNum(q[0], st.env); ry = q[1] ? tzNum(q[1], st.env) : rx;
-                                }
-                                if (cur && !isNaN(rx) && !isNaN(ry)) {
-                                    st.items.push(`<ellipse cx="${X(cur[0])}" cy="${Y(cur[1])}" rx="${Math.abs(rx * sx)}" ry="${Math.abs(ry * sy)}" ${sty}/>`);
-                                    bb((cur[0] - rx) * sx, (cur[1] - ry) * sy); bb((cur[0] + rx) * sx, (cur[1] + ry) * sy);
-                                }
-                            } else if (kw[1] === 'arc') {
-                                let a1, a2, rx, ry;
-                                if (rest[i] === '[') {
-                                    const o = bal('[', ']');
-                                    const sA = o.match(/start angle\s*=\s*([^,\]]+)/), eA = o.match(/end angle\s*=\s*([^,\]]+)/);
-                                    const xR = o.match(/x\s*radius\s*=\s*([^,\]]+)/), yR = o.match(/y\s*radius\s*=\s*([^,\]]+)/), rM = o.match(/radius\s*=\s*([^,\]]+)/);
-                                    a1 = sA ? tzNum(sA[1], st.env) : 0; a2 = eA ? tzNum(eA[1], st.env) : 90;
-                                    rx = xR ? tzNum(xR[1], st.env) : (rM ? tzNum(rM[1], st.env) : 1);
-                                    ry = yR ? tzNum(yR[1], st.env) : rx;
-                                } else {
-                                    let o = bal('(', ')');
-                                    const andParts = o.split(/\s+and\s+/);
-                                    const q = andParts[0].split(':').map(v => tzNum(v, st.env));
-                                    a1 = q[0]; a2 = q[1]; rx = q[2]; ry = andParts[1] ? tzNum(andParts[1], st.env) : rx;
-                                }
-                                if (cur && !isNaN(a1) && !isNaN(a2) && !isNaN(rx)) {
-                                    const R = Math.PI / 180, ctr = [cur[0] - rx * Math.cos(a1 * R), cur[1] - ry * Math.sin(a1 * R)], e = [ctr[0] + rx * Math.cos(a2 * R), ctr[1] + ry * Math.sin(a2 * R)];
-                                    d += `A ${Math.abs(rx * sx)} ${Math.abs(ry * sy)} 0 ${Math.abs(a2 - a1) > 180 ? 1 : 0} ${a2 > a1 ? 0 : 1} ${X(e[0])} ${Y(e[1])} `;
-                                    bbp(e); bbp(ctr); cur = e;
-                                }
-                            } else if (kw[1] === 'rectangle') {
-                                const p = tzPt(bal('(', ')'), st);
-                                if (cur && p) {
-                                    const x = Math.min(cur[0] * sx, p[0] * sx), y = Math.min(cur[1] * sy, p[1] * sy);
-                                    st.items.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${Math.abs((p[0] - cur[0]) * sx).toFixed(2)}" height="${Math.abs((p[1] - cur[1]) * sy).toFixed(2)}" ${sty}/>`);
-                                    bbp(cur); bbp(p); cur = p;
-                                }
-                            } else if (kw[1] === 'node') {
-                                let no = '', nm = '', at = null; ws();
-                                while (rest[i] === '[') { no += (no ? ',' : '') + bal('[', ']'); ws(); }
-                                if (rest[i] === '(') { nm = bal('(', ')'); ws(); }
-                                while (rest[i] === '[') { no += (no ? ',' : '') + bal('[', ']'); ws(); }
-                                if (rest.startsWith('at', i)) { i += 2; ws(); at = tzPt(bal('(', ')'), st); ws(); }
-                                while (rest[i] === '[') { no += (no ? ',' : '') + bal('[', ']'); ws(); }
-                                if (rest[i] === '{') {
-                                    const txt = bal('{', '}');
-                                    let p = at || cur;
-                                    if (!at && prevPt && cur && /midway|pos\s*=/.test(no)) {
-                                        const posM = no.match(/pos\s*=\s*([\d.]+)/);
-                                        const t = posM ? parseFloat(posM[1]) : 0.5;
-                                        p = [prevPt[0] + t * (cur[0] - prevPt[0]), prevPt[1] + t * (cur[1] - prevPt[1])];
-                                    }
-                                    renderNode(p, no, nm, txt);
-                                }
-                            } else if (kw[1] === 'plot') {
-                                ws(); let po = ''; if (rest[i] === '[') po = bal('[', ']'); ws();
-                                if (rest.startsWith('coordinates', i)) {
-                                    i += 11; ws(); const coordsStr = bal('{', '}');
-                                    const cMatches = [...coordsStr.matchAll(/\(([^)]+)\)/g)];
-                                    let pd = '', on = false;
-                                    cMatches.forEach(cm => {
-                                        const pt = tzPt(cm[1], st);
-                                        if (pt) { pd += (on ? 'L ' : 'M ') + X(pt[0]) + ' ' + Y(pt[1]) + ' '; on = true; bbp(pt); cur = pt; }
-                                    });
-                                    if (pd) st.items.push(`<path d="${pd}" ${tzStyle(opts, kind === 'path' ? 'draw' : kind)}/>`);
-                                } else if (rest[i] === '(') {
-                                    const e = bal('(', ')'); const ex = tzSplitTop(e, ',');
-                                    const allOpts = po + ',' + (opts || '');
-                                    const dm = allOpts.match(/domain\s*=\s*(-?[\d.\\a-zA-Z*/+-]+):(-?[\d.\\a-zA-Z*/+-]+)/i), sm = allOpts.match(/samples\s*=\s*(\d+)/);
-                                    const vn = (ex.join('').match(/\\([a-zA-Z]+)/) || [0, 'x'])[1], a = dm ? tzNum(dm[1], st.env) : -3.5, b2 = dm ? tzNum(dm[2], st.env) : 3.5, n = Math.min(300, Math.max(120, sm ? +sm[1] : 160));
-                                    let pd = '', on = false;
-                                    for (let k = 0; k <= n; k++) {
-                                        const env = Object.assign({}, st.env, { [vn]: a + (b2 - a) * k / n }), px = tzNum(ex[0], env), py = tzNum(ex[1], env);
-                                        if (isFinite(px) && isFinite(py) && Math.abs(py) < 25) {
-                                            if (d && k === 0 && pending) pd += `L ${X(px)} ${Y(py)} `;
-                                            else pd += (on ? 'L ' : 'M ') + X(px) + ' ' + Y(py) + ' ';
-                                            on = true; bbp([px, py]); cur = [px, py];
-                                        } else on = false;
-                                    }
-                                    if (d && pending) { d += pd; pending = false; }
-                                    else if (pd) st.items.push(`<path d="${pd}" ${tzStyle(opts, kind === 'path' ? 'draw' : kind)}/>`);
-                                }
-                            }
-                            continue;
-                        }
-                        i++;
-                    }
-                    if (d.trim()) st.items.push(`<path d="${d}" ${sty}/>`);
-                };
+                let expandedTikz = tikzStr;
+                const foreachRegex = /\\foreach\s+\\([a-zA-Z]+)\/\\([a-zA-Z]+)\s+in\s+\{([^}]+)\}\s*([^{;]+;)/g;
+                expandedTikz = expandedTikz.replace(foreachRegex, (match, var1, var2, list, cmd) => {
+                    let res = '';
+                    list.split(',').forEach(pair => {
+                        const parts = pair.split('/');
+                        if(parts.length===2) res += cmd.replace(new RegExp('\\\\'+var1, 'g'), parts[0]).replace(new RegExp('\\\\'+var2, 'g'), parts[1]) + ' ';
+                    }); return res;
+                });
+                const foreachRegex2 = /\\foreach\s+\\([a-zA-Z]+)\s+in\s+\{([^}]+)\}\s*([^{;]+;)/g;
+                expandedTikz = expandedTikz.replace(foreachRegex2, (match, var1, list, cmd) => {
+                    let res = '';
+                    list.split(',').forEach(v1 => res += cmd.replace(new RegExp('\\\\'+var1, 'g'), v1) + ' ');
+                    return res;
+                });
 
-                // Tách câu lệnh theo ';' ở cấp ngoặc ngoài cùng (không tách nhầm ';' bên trong {rgb, 255:red, 65; green, ...})
-                tzSplitTop(src, ';').forEach(raw => {
-                    const cmd = raw.trim(); if (!cmd) return; let m;
-                    // Cho phép nhiều khối [options][options] nối tiếp nhau (chuẩn Mathcha)
-                    if ((m = cmd.match(/^\\(draw|fill|filldraw|path|node)\b\s*((?:\[[\s\S]*?\]\s*)*)([\s\S]*)$/))) {
-                        if (m[1] === 'node') drawPath('path', '', 'node ' + (m[2] || '') + ' ' + m[3]); else drawPath(m[1], m[2], m[3]);
-                    } else if ((m = cmd.match(/^\\coordinate\s*(?:\[([^\]]*)\])?\s*\(([^)]+)\)\s*at\s*\(([\s\S]*)\)\s*$/))) {
-                        const p = tzPt(m[3], st);
-                        if (p) {
-                            st.pts[m[2].trim()] = p;
-                            if (m[1] && m[1].includes('label')) {
-                                const lm = m[1].match(/label\s*=\s*(?:\{?([^:}]+):([^}]+)\}?|([^,]+))/);
-                                if (lm) renderNode(p, lm[1] || 'above', '', lm[2] || lm[3]);
+                let svgLines = '';
+                let svgNodes = '';
+
+                const commands = expandedTikz.split(';');
+                commands.forEach(cmd => {
+                    cmd = cmd.trim();
+                    if (!cmd || cmd.startsWith('%') || cmd.startsWith('\\clip') || cmd.startsWith('\\begin') || cmd.startsWith('\\end')) return;
+
+                    if (cmd.includes('plot')) {
+                        let domainMatch = cmd.match(/domain=(-?[\d.]+):(-?[\d.]+)/);
+                        let dMin = xMin, dMax = xMax;
+                        if(domainMatch) { dMin = parseFloat(domainMatch[1]); dMax = parseFloat(domainMatch[2]); }
+                        
+                        let plotMatch = cmd.match(/plot\s*\(\s*\\x\s*,\s*\{([^}]+)\}\s*\)/);
+                        if(plotMatch) {
+                            let expr = plotMatch[1];
+                            expr = expr.replace(/\\x/g, '(x)').replace(/\^/g, '**').replace(/sin\(/g, 'Math.sin(').replace(/cos\(/g, 'Math.cos(').replace(/tan\(/g, 'Math.tan(');
+                            
+                            let pathD = '';
+                            let steps = 150;
+                            let isDrawing = false;
+                            
+                            for(let i=0; i<=steps; i++) {
+                                let x = dMin + (dMax - dMin) * (i/steps);
+                                try {
+                                    let y = new Function('x', 'return ' + expr)(x);
+                                    if(y >= yMin - 1 && y <= yMax + 1) { 
+                                        pathD += (isDrawing ? 'L ' : 'M ') + mapX(x) + ' ' + mapY(y) + ' ';
+                                        isDrawing = true;
+                                    } else {
+                                        isDrawing = false;
+                                    }
+                                } catch(err){}
                             }
+                            if(pathD) svgLines += `<path d="${pathD}" fill="none" stroke="#1f2937" stroke-width="1.8" stroke-linejoin="round"/>`;
                         }
-                    } else if ((m = cmd.match(/^\\(tkz\w+)\s*(\[[^\]]*\])?\s*(\([^)]*\))?\s*(?:\{([^}]*)\})?\s*(?:\{([^}]*)\})?/))) {
-                        const fn = m[1], o = m[2] || '', args = (m[3] || '').replace(/^\(|\)$/g, ''), br = m[4];
-                        const names = args.split(/[,\s]+/).filter(Boolean), P = n => st.pts[n.trim()];
-                        if (fn === 'tkzDefPoints') tzSplitTop(br || '', ',').forEach(t => { const q = t.split('/'); if (q.length === 3) st.pts[q[2].trim()] = [tzNum(q[0], st.env), tzNum(q[1], st.env)]; });
-                        else if (fn === 'tkzDefPoint') { const p = tzPt(args, st); if (p && br) st.pts[br.trim()] = p; }
-                        else if (fn === 'tkzDefShiftPoint') {
-                            const base = P(o.replace(/^\[|\]$/g, '')); const d = tzPt(args, st);
-                            if (base && d && br) st.pts[br.trim()] = [base[0] + d[0], base[1] + d[1]];
-                        }
-                        else if (fn === 'tkzDefMidPoint') { const a = P(names[0]), b = P(names[1]); if (a && b) st.last = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
-                        else if (fn === 'tkzGetPoint') { if (st.last && br) st.pts[br.trim()] = st.last; }
-                        else if (fn === 'tkzDrawPolygon' || fn === 'tkzDrawPolyline') { const ps = names.map(P).filter(Boolean); if (ps.length > 1) drawPath('draw', o, ps.map((p, k) => (k ? '-- ' : '') + `(${p[0]},${p[1]})`).join(' ') + (fn === 'tkzDrawPolygon' ? ' -- cycle' : '')); }
-                        else if (fn === 'tkzFillPolygon') { const ps = names.map(P).filter(Boolean); if (ps.length > 1) drawPath('fill', o, ps.map((p, k) => (k ? '-- ' : '') + `(${p[0]},${p[1]})`).join(' ') + ' -- cycle'); }
-                        else if (fn === 'tkzDrawSegment' || fn === 'tkzDrawSegments') { const prs = fn === 'tkzDrawSegment' ? [names] : args.split(/\s+/).filter(Boolean).map(s => s.split(',')); prs.forEach(pr => { const a = P(pr[0]), b = P(pr[1]); if (a && b) drawPath('draw', o, `(${a[0]},${a[1]}) -- (${b[0]},${b[1]})`); }); }
-                        else if (fn === 'tkzDrawCircle') { const c = P(names[0]), a = P(names[1]); if (c && a) { const r = Math.hypot(a[0] - c[0], a[1] - c[1]); drawPath('draw', o, `(${c[0]},${c[1]}) circle (${r})`); } }
-                        else if (fn === 'tkzDrawPoints') names.map(P).filter(Boolean).forEach(p => { st.items.push(`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="#111"/>`); bbp(p); });
-                        else if (fn === 'tkzLabelPoints') { names.forEach(n => { const p = P(n); if (p) renderNode(p, o || 'below left', '', n); }); }
-                        else if (fn === 'tkzLabelPoint') { const p = P(names[0]); if (p && br) renderNode(p, o || 'below left', '', br); }
-                        else if (fn === 'tkzLabelSegment') { const a = P(names[0]), b = P(names[1]); if (a && b && br) renderNode([(a[0]+b[0])/2, (a[1]+b[1])/2], o || 'above', '', br); }
-                        else if (fn === 'tkzMarkRightAngle' || fn === 'tkzMarkRightAngles') {
-                            const szM = o.match(/size\s*=\s*([\d.]+)/); const sz = szM ? parseFloat(szM[1]) : 0.25;
-                            const groups = fn === 'tkzMarkRightAngle' ? [names] : args.split(/\s+/).filter(Boolean).map(s => s.split(','));
-                            groups.forEach(g => {
-                                const A = P(g[0]), B = P(g[1]), C = P(g[2]);
-                                if (A && B && C) {
-                                    const d1 = Math.hypot(A[0]-B[0], A[1]-B[1]) || 1, d2 = Math.hypot(C[0]-B[0], C[1]-B[1]) || 1;
-                                    const u = [(A[0]-B[0])/d1 * sz, (A[1]-B[1])/d1 * sz], v = [(C[0]-B[0])/d2 * sz, (C[1]-B[1])/d2 * sz];
-                                    const p1 = [B[0]+u[0], B[1]+u[1]], p2 = [B[0]+u[0]+v[0], B[1]+u[1]+v[1]], p3 = [B[0]+v[0], B[1]+v[1]];
-                                    drawPath('draw', '[thin]', `(${p1[0]},${p1[1]}) -- (${p2[0]},${p2[1]}) -- (${p3[0]},${p3[1]})`);
-                                }
+                    } else if (cmd.includes('\\draw')) {
+                        const isDashed = cmd.includes('dashed');
+                        const hasArrow = cmd.includes('->');
+                        
+                        const coords = [...cmd.matchAll(/\(([^,]+),([^)]+)\)/g)];
+                        if(coords.length > 0) {
+                            let pathD = '';
+                            coords.forEach((c, i) => {
+                                let x = cleanVal(c[1]); let y = cleanVal(c[2]);
+                                pathD += (i===0 ? 'M ' : 'L ') + mapX(x) + ' ' + mapY(y) + ' ';
                             });
-                        } else if (fn === 'tkzMarkAngle') {
-                            const szM = o.match(/size\s*=\s*([\d.]+)/); const sz = szM ? parseFloat(szM[1]) : 0.5;
-                            const A = P(names[0]), B = P(names[1]), C = P(names[2]);
-                            if (A && B && C) {
-                                const a1 = Math.atan2(A[1]-B[1], A[0]-B[0]) * 180 / Math.PI;
-                                let a2 = Math.atan2(C[1]-B[1], C[0]-B[0]) * 180 / Math.PI;
-                                if (a2 < a1) a2 += 360;
-                                const pStart = [B[0] + sz * Math.cos(a1 * Math.PI / 180), B[1] + sz * Math.sin(a1 * Math.PI / 180)];
-                                drawPath('draw', '[thin]', `(${pStart[0]},${pStart[1]}) arc (${a1}:${a2}:${sz})`);
-                            }
+                            let style = `fill="none" stroke="#4b5563" stroke-width="1"`;
+                            if(isDashed) style += ` stroke-dasharray="4,4" opacity="0.7" stroke-width="1.2"`;
+                            if(hasArrow) style += ` marker-end="url(#arrowHead)" stroke-width="1.2" stroke="#1f2937"`;
+                            svgLines += `<path d="${pathD}" ${style} />`;
                         }
+
+                        const nodeMatch = cmd.match(/node\s*(?:\[([^\]]*)\])?\s*\{([^}]+)\}/);
+                        if (nodeMatch && coords.length > 0) {
+                            let lastCoord = coords[coords.length-1];
+                            let x = mapX(cleanVal(lastCoord[1])); let y = mapY(cleanVal(lastCoord[2]));
+                            let pos = nodeMatch[1] || ''; let text = nodeMatch[2].replace(/\$/g,'');
+                            
+                            let tx = x, ty = y;
+                            if(pos.includes('below')) ty += 14;
+                            if(pos.includes('above')) ty -= 14;
+                            if(pos.includes('left')) tx -= 14;
+                            if(pos.includes('right')) tx += 14;
+                            
+                            svgNodes += `<text x="${tx}" y="${ty}" font-family="Times New Roman, serif" font-size="15" font-style="italic" fill="#000" text-anchor="middle" dominant-baseline="middle">${text}</text>`;
+                        }
+                    } else if (cmd.includes('\\node')) {
+                         const nodeMatch = cmd.match(/\\node\s*(?:\[([^\]]*)\])?\s*at\s*\(([^,]+),([^)]+)\)\s*\{([^}]+)\}/);
+                         if (nodeMatch) {
+                             let x = mapX(cleanVal(nodeMatch[2])); let y = mapY(cleanVal(nodeMatch[3]));
+                             let text = nodeMatch[4].replace(/\$/g,'');
+                             svgNodes += `<text x="${x}" y="${y}" font-family="Times New Roman, serif" font-size="15" font-style="italic" fill="#000" text-anchor="middle" dominant-baseline="middle">${text}</text>`;
+                         }
                     }
                 });
 
-                if (!st.items.length && !st.texts.length) return '';
-                const pad = 16, w = B.x1 - B.x0 + 2 * pad, h = B.y1 - B.y0 + 2 * pad;
-                return `<div class="w-full flex justify-center my-3 overflow-x-auto"><svg viewBox="${(B.x0 - pad).toFixed(1)} ${(B.y0 - pad).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}" style="width:${Math.min(Math.max(w, 180), 420).toFixed(0)}px;max-width:100%;height:auto;overflow:visible" class="bg-white rounded">`
-                    + `<defs><marker id="tzA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1L10 5L0 9z" fill="#111"/></marker><marker id="tzA2" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L10 5L0 9z" fill="#111"/></marker></defs>`
-                    + st.items.join('') + st.texts.join('') + `</svg></div>`;
-            } catch (err) { console.error('TikZ engine error:', err); return ''; }
-        };
-
-        /* Bảng tabular -> HTML */
-        const convertTabular = t => t.replace(/\\begin\{tabular\}\{[^}]*\}([\s\S]*?)\\end\{tabular\}/g, (m, b) => {
-            const rows = b.replace(/\\hline|\\cline\{[^}]*\}/g, '').split('\\\\').map(r => r.trim()).filter(Boolean);
-            return '<div class="overflow-x-auto my-3"><table class="border-collapse border border-gray-700 mx-auto bg-white shadow-sm">' + rows.map(r => '<tr>' + r.split('&').map(c => '<td class="border border-gray-700 px-3 py-1.5 text-center">' + c.trim() + '</td>').join('') + '</tr>').join('') + '</table></div>';
-        });
-
-        /* Tách \immini an toàn ngay cả khi có nhiều cấp ngoặc nhọn {} lồng nhau */
-        const processImminiBlocks = (text) => {
-            let guard = 0;
-            while (text.includes('\\immini') && guard++ < 25) {
-                const idx = text.indexOf('\\immini');
-                let pos = idx + 7;
-                while (pos < text.length && /\s/.test(text[pos])) pos++;
-                if (text[pos] === '[') {
-                    let b = 0;
-                    for (; pos < text.length; pos++) {
-                        if (text[pos] === '[') b++;
-                        else if (text[pos] === ']' && --b === 0) { pos++; break; }
-                    }
-                }
-                while (pos < text.length && /\s/.test(text[pos])) pos++;
-                if (text[pos] !== '{') break;
-                let start1 = pos, end1 = -1, braces1 = 0;
-                for (let i = start1; i < text.length; i++) {
-                    if (text[i] === '{') braces1++;
-                    else if (text[i] === '}' && --braces1 === 0) { end1 = i; break; }
-                }
-                if (end1 === -1) break;
-                pos = end1 + 1;
-                while (pos < text.length && /\s/.test(text[pos])) pos++;
-                if (text[pos] !== '{') break;
-                let start2 = pos, end2 = -1, braces2 = 0;
-                for (let i = start2; i < text.length; i++) {
-                    if (text[i] === '{') braces2++;
-                    else if (text[i] === '}' && --braces2 === 0) { end2 = i; break; }
-                }
-                if (end2 === -1) break;
-                const textPart = text.substring(start1 + 1, end1);
-                const imgPart = text.substring(start2 + 1, end2);
-                const htmlStr = `<div class="flex flex-col md:flex-row items-center gap-4 my-3 w-full"><div class="w-full md:flex-1 text-gray-800 text-justify leading-relaxed whitespace-normal break-words">${textPart}</div><div class="w-full md:w-auto flex justify-center items-center overflow-x-auto flex-shrink-0">${imgPart}</div></div>`;
-                text = text.substring(0, idx) + htmlStr + text.substring(end2 + 1);
+                svg += svgLines + svgNodes + `</svg></div>`;
+                return svg;
+            } catch(err) {
+                console.error("Custom TikZ Parser Error:", err);
+                return null; 
             }
-            return text;
         };
-
-        // Bộ nhớ tạm giữ các khối TikZ để biên dịch sang PDF -> Cắt ảnh PNG
-        window.pendingTikzQueue = [];
 
         const formatLatexMath = (text, qId) => {
             if (!text) return '';
 
             // 1. Dọn dẹp dàn trang dư thừa
-            text = text.replace(/\\begin\{minipage\}(?:\[[^\]]*\])?\{[^}]*\}/g, '');
+            text = text.replace(/\\begin\{minipage\}\{.*?\}/g, '');
+            text = text.replace(/\\begin\{minipage\}\[\w\]\{.*?\}/g, '');
             text = text.replace(/\\end\{minipage\}/g, '');
             text = removeScalebox(text); 
 
-            // 2. Parse \immini & \immini[thm] - Tách Hình và Chữ chuẩn xác
-            text = processImminiBlocks(text);
+            // 2. Parse \immini - Tách Hình và Chữ
+            let idx = text.indexOf('\\immini');
+            while (idx !== -1) {
+                let start1 = text.indexOf('{', idx);
+                let bracketStart = text.indexOf('[', idx);
+                if (bracketStart !== -1 && bracketStart < start1) {
+                    let bracketEnd = text.indexOf(']', bracketStart);
+                    start1 = text.indexOf('{', bracketEnd);
+                }
+                
+                let end1 = -1, braces1 = 0;
+                for (let i = start1; i < text.length; i++) {
+                    if (text[i] === '{') braces1++;
+                    if (text[i] === '}') { braces1--; if (braces1 === 0) { end1 = i; break; } }
+                }
+                let start2 = text.indexOf('{', end1 + 1);
+                let end2 = -1, braces2 = 0;
+                for (let i = start2; i < text.length; i++) {
+                    if (text[i] === '{') braces2++;
+                    if (text[i] === '}') { braces2--; if (braces2 === 0) { end2 = i; break; } }
+                }
+                if (end1 !== -1 && end2 !== -1) {
+                    let textPart = text.substring(start1 + 1, end1);
+                    let imgPart = text.substring(start2 + 1, end2);
+                    let fullMatch = text.substring(idx, end2 + 1);
+                    
+                    let htmlStr = `<div class="flex flex-col gap-4 my-3 w-full"><div class="w-full text-gray-800 text-justify leading-relaxed whitespace-normal break-words">${textPart}</div><div class="w-full flex justify-center items-center overflow-x-auto">${imgPart}</div></div>`;
+                    text = text.replace(fullMatch, htmlStr);
+                } else break;
+                idx = text.indexOf('\\immini');
+            }
 
-            // 3. Chuyển đổi bảng \begin{tabular} sang HTML
-            text = convertTabular(text);
-
-            // 4. Xử lý mọi hình vẽ TikZ (Vẽ ngay bằng SVG v3.0 + Đánh dấu ID để thay bằng Ảnh cắt từ PDF nếu bật)
+            // 3. Xử lý TikZ Bằng Trình Duyệt JS Mới
             text = text.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/g, (match) => {
-                const slotId = 'tzslot_' + Math.random().toString(36).substring(2, 10);
-                window.pendingTikzQueue.push({ slotId, tikz: match, qId });
-
-                if (match.includes('\\tkzTabInit') || match.includes('\\tkzTabLine') || match.includes('\\tkzTabVar')) {
-                    return `<div data-tz-slot="${slotId}" class="w-full flex justify-center">${parseTkzTabToHTML(match)}</div>`;
+                if (match.includes('\\tkzTabInit') || match.includes('\\tkzTabLine')) {
+                    return parseTkzTabToHTML(match);
                 } else {
-                    const svgHtml = parseTikZGraphToSVG(match);
-                    return `<div data-tz-slot="${slotId}" class="w-full flex justify-center">${svgHtml || '<div class="text-xs text-purple-600 p-3 animate-pulse">⏳ Đang biên dịch LaTeX sang PDF và cắt ảnh...</div>'}</div>`;
+                    const svgGraph = parseTikZGraphToSVG(match);
+                    if (svgGraph) {
+                        return svgGraph;
+                    } else {
+                        return `<div class="border-2 border-dashed border-blue-300 bg-blue-50 text-blue-600 rounded-xl p-4 w-full max-w-sm mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4"><span class="text-3xl mb-2">🖼️</span><span class="text-xs font-bold px-2">Đồ thị quá dị thường. Vui lòng dùng nút <b>📷 Thêm Ảnh</b> để chèn lại.</span></div>`;
+                    }
                 }
             });
             
             // Xử lý includegraphics
-            text = text.replace(/\\includegraphics(?:\[.*?\])?\{.*?\}/g, `<div class="border-2 border-dashed border-blue-300 bg-blue-50 text-blue-600 rounded-xl p-4 w-full max-w-sm mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4"><span class="text-3xl mb-2">🖼️</span><span class="text-xs font-bold px-2">Phát hiện lệnh chèn ảnh file rời. Vui lòng dùng nút <b>📷 Thêm Ảnh</b> để tải ảnh lên.</span></div>`);
+            text = text.replace(/\\includegraphics(?:\[.*?\])?\{.*?\}/g, `<div class="border-2 border-dashed border-blue-300 bg-blue-50 text-blue-600 rounded-xl p-4 w-full max-w-sm mx-auto text-center flex flex-col items-center justify-center shadow-sm my-4"><span class="text-3xl mb-2">🖼️</span><span class="text-xs font-bold px-2">Phát hiện lệnh chèn ảnh gốc. Vui lòng dùng nút <b>📷 Thêm Ảnh</b> để chèn lại.</span></div>`);
 
-            // 5. Các định dạng LaTeX phổ biến khác
+            // 4. Các định dạng chung khác
             return text
-                .replace(/\\begin\{center\}/g, '<div class="text-center w-full flex flex-col items-center justify-center my-2">')
+                .replace(/\\begin\{center\}/g, '<div class="text-center w-full flex justify-center my-2">')
                 .replace(/\\end\{center\}/g, '</div>')
-                .replace(/\\begin\{(?:enumEX|enumerate|itemize)\}(?:\[.*?\])?(?:\{.*?\})?/g, '<div class="pl-5 mt-2 space-y-2">')
-                .replace(/\\end\{(?:enumEX|enumerate|itemize)\}/g, '</div>')
+                .replace(/\\begin\{enumEX\}(?:\[.*?\])?\{.*?\}/g, '<div class="pl-5 mt-2 space-y-2">')
+                .replace(/\\end\{enumEX\}/g, '</div>')
                 .replace(/\\item/g, '<br><span class="text-primary font-bold mr-2">•</span> ')
-                .replace(/\\textbf\{([^{}]*)\}/g, '<b>$1</b>')
-                .replace(/\\textit\{([^{}]*)\}/g, '<i>$1</i>')
-                .replace(/\\underline\{([^{}]*)\}/g, '<u>$1</u>')
                 .replace(/\\hspace\*?\{.*?\}/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
-                .replace(/\\vspace\*?\{.*?\}/g, '<div class="my-1"></div>')
                 .replace(/\\heva\{([\s\S]*?)\}/g, '\\begin{cases} $1 \\end{cases}')
                 .replace(/\\hoac\{([\s\S]*?)\}/g, '\\begin{bmatrix} $1 \\end{bmatrix}');
         };
@@ -1445,17 +941,15 @@ ${tikzCode}
                 block = block.replace(loigiaiMatch.fullMatch, '');
             }
 
-            if (block.includes('\\choiceTF')) {
+            if (block.includes('\\choiceTFn')) {
                 type = 'true_false';
-                const kwMatch = block.match(/\\choiceTF[a-zA-Z]*/);
-                const kw = kwMatch ? kwMatch[0] : '\\choiceTF';
-                const keywordIdx = block.indexOf(kw);
+                const keywordIdx = block.indexOf('\\choiceTFn');
                 qText = block.substring(0, keywordIdx).trim();
-                const options = parseOptions(block, kw);
+                const options = parseOptions(block, '\\choiceTFn');
                 let tfAns = '';
                 options.forEach((opt) => {
                     if (opt.includes('\\True')) tfAns += 'Đ'; else tfAns += 'S';
-                    parsedOptions.push(formatLatexMath(opt.replace(/\\True\s*/g, '').trim(), qId)); 
+                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim(), qId)); 
                 });
                 ans = tfAns;
             } else if (block.includes('\\shortans')) {
@@ -1465,17 +959,15 @@ ${tikzCode}
                     ans = saMatch.content.replace(/\$/g, '').trim(); 
                     qText = block.substring(0, saMatch.startIndex).trim();
                 }
-            } else if (block.includes('\\choice') || block.includes('\\motcot') || block.includes('\\haicot') || block.includes('\\boncot')) {
+            } else if (block.includes('\\choice')) {
                 type = 'mcq';
-                const kwMatch = block.match(/\\(?:choice|motcot|haicot|boncot)\b/);
-                const kw = kwMatch ? kwMatch[0] : '\\choice';
-                const keywordIdx = block.indexOf(kw);
+                const keywordIdx = block.indexOf('\\choice');
                 qText = block.substring(0, keywordIdx).trim();
-                const options = parseOptions(block, kw);
+                const options = parseOptions(block, '\\choice');
                 options.forEach((opt, idx) => {
                     let letter = ['A','B','C','D'][idx];
                     if (opt.includes('\\True')) ans = letter;
-                    parsedOptions.push(formatLatexMath(opt.replace(/\\True\s*/g, '').trim(), qId)); 
+                    parsedOptions.push(formatLatexMath(opt.replace('\\True', '').trim(), qId)); 
                 });
             } else {
                 type = 'short_answer';
@@ -1486,40 +978,10 @@ ${tikzCode}
             return { type, ans, qText: formatLatexMath(qText, qId), sText: formatLatexMath(sText, qId), options: parsedOptions, isLatex: true };
         };
 
-        /* Thay thế vị trí slot bằng ảnh PNG đã cắt từ PDF */
-        const replaceSlotWithCroppedImage = (qId, slotId, pngDataUrl) => {
-            const qItem = window.qBank.find(q => q.id === qId);
-            if (!qItem) return;
-            const imgTag = `<img src="${pngDataUrl}" class="max-h-72 object-contain my-2 mx-auto rounded shadow-sm bg-white p-1" alt="TikZ PDF Cropped">`;
-            const slotRegex = new RegExp(`<div data-tz-slot="${slotId}"[^>]*>[\\s\\S]*?<\\/div>\\s*<\\/div>|<div data-tz-slot="${slotId}"[^>]*>[\\s\\S]*?<\\/div>`, 'g');
-
-            // Dùng DOM tạm để thay chính xác phần tử có data-tz-slot
-            const replaceInHtml = (htmlStr) => {
-                if (!htmlStr || !htmlStr.includes(slotId)) return htmlStr;
-                const wrap = document.createElement('div');
-                wrap.innerHTML = htmlStr;
-                const el = wrap.querySelector(`[data-tz-slot="${slotId}"]`);
-                if (el) {
-                    el.innerHTML = imgTag;
-                    return wrap.innerHTML;
-                }
-                return htmlStr;
-            };
-
-            qItem.qText = replaceInHtml(qItem.qText);
-            qItem.sText = replaceInHtml(qItem.sText);
-            if (Array.isArray(qItem.options)) {
-                qItem.options = qItem.options.map(opt => replaceInHtml(opt));
-            }
-        };
-
-        window.processLatexEntry = async (btn) => {
+        window.processLatexEntry = (btn) => {
             const text = document.getElementById('latex-input').value;
             if (!text.trim()) return customAlert("Vui lòng dán mã LaTeX!");
-            btn.disabled = true; btn.innerText = "Đang phân tích...";
-            const statusBox = document.getElementById('latex-compile-status');
-            window.pendingTikzQueue = [];
-
+            btn.disabled = true; btn.innerText = "Đang xử lý...";
             try {
                 const regex = /\\begin\{ex\}([\s\S]*?)\\end\{ex\}/g;
                 let match; let count = 0;
@@ -1537,28 +999,7 @@ ${tikzCode}
                 if (count > 0) {
                     document.getElementById('latex-input').value = '';
                     renderQBankUI();
-
-                    // Nếu bật tính năng biên dịch LaTeX -> PDF -> Cắt ảnh PNG
-                    const usePdfCrop = document.getElementById('use-pdf-crop')?.checked;
-                    const queue = [...window.pendingTikzQueue];
-                    window.pendingTikzQueue = [];
-
-                    if (usePdfCrop && queue.length > 0) {
-                        statusBox.classList.remove('hidden');
-                        let done = 0;
-                        for (const item of queue) {
-                            done++;
-                            statusBox.innerText = `⚙️ Đang biên dịch LaTeX ra PDF & cắt ảnh (${done}/${queue.length})...`;
-                            const pngUrl = await compileTikZToPDFImage(item.tikz);
-                            if (pngUrl) {
-                                replaceSlotWithCroppedImage(item.qId, item.slotId, pngUrl);
-                                renderQBankUI();
-                            }
-                        }
-                        statusBox.innerText = `✅ Đã hoàn tất xử lý ${queue.length} hình vẽ cho ${count} câu hỏi!`;
-                        setTimeout(() => statusBox.classList.add('hidden'), 4000);
-                    }
-                    customAlert(`Đã phân tích và thêm thành công ${count} câu hỏi kèm hình ảnh minh họa!`);
+                    customAlert(`Đã phân tích và thêm thành công ${count} câu hỏi từ LaTeX!`);
                 } else { customAlert("Không tìm thấy câu hỏi nào hợp lệ. Đảm bảo cấu trúc có \\begin{ex} và \\end{ex}."); }
             } catch (e) { console.error(e); customAlert("Lỗi xử lý LaTeX: " + e.message); } 
             finally { btn.disabled = false; btn.innerText = "✍️ Phân Tích & Thêm Vào Ngân Hàng"; }
@@ -1663,6 +1104,61 @@ ${tikzCode}
             input.click();
         }
 
+        // --- TÍNH NĂNG MỚI: CHỈNH SỬA VÀ DÁN ẢNH INLINE (CTRL+V) ---
+        window.toggleEditMode = (id, showEdit) => {
+            const viewEl = document.getElementById(`view-mode-${id}`);
+            const editEl = document.getElementById(`edit-mode-${id}`);
+            if (showEdit) {
+                const q = window.qBank.find(item => item.id === id);
+                document.getElementById(`edit-qText-${id}`).value = q.qText;
+                document.getElementById(`edit-sText-${id}`).value = q.sText || '';
+                viewEl.classList.add('hidden');
+                editEl.classList.remove('hidden');
+            } else {
+                viewEl.classList.remove('hidden');
+                editEl.classList.add('hidden');
+            }
+        };
+
+        window.saveEdit = (id) => {
+            const q = window.qBank.find(item => item.id === id);
+            if (q) {
+                q.qText = document.getElementById(`edit-qText-${id}`).value;
+                q.sText = document.getElementById(`edit-sText-${id}`).value;
+                renderQBankUI(); // Render lại giao diện và MathJax
+            }
+        };
+
+        window.handleImagePaste = (e, textarea) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let index in items) {
+                const item = items[index];
+                // Kiểm tra xem dữ liệu dán vào có phải là ảnh không
+                if (item.kind === 'file' && item.type.includes('image/')) {
+                    e.preventDefault(); // Chặn hành vi dán text mặc định
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const base64Img = event.target.result;
+                        // Tạo thẻ img HTML với base64 để chèn thẳng vào chữ
+                        const imgTag = `<br><img src="${base64Img}" class="max-h-64 w-auto object-contain inline-block my-2 border border-gray-300 rounded shadow-sm" alt="Ảnh minh họa"><br>`;
+                        
+                        // Lấy vị trí con trỏ hiện tại trong khung text
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+                        
+                        // Chèn mã ảnh vào vị trí con trỏ
+                        textarea.value = textarea.value.substring(0, start) + imgTag + textarea.value.substring(end);
+                        
+                        // Đẩy con trỏ ra phía sau ảnh vừa chèn
+                        textarea.selectionStart = textarea.selectionEnd = start + imgTag.length;
+                    };
+                    reader.readAsDataURL(blob);
+                    break; // Xử lý 1 ảnh là đủ
+                }
+            }
+        };
+
         window.renderQBankUI = () => {
             const container = document.getElementById('questions-list-container');
             const emptyState = document.getElementById('empty-state');
@@ -1681,9 +1177,9 @@ ${tikzCode}
                         let optionsPreview = '';
                         if (q.options && q.options.length > 0) {
                             if (q.type === 'mcq') {
-                                optionsPreview = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">${['A','B','C','D'][idx]}.</b><span class="latex-content break-words whitespace-normal w-full">${opt}</span></div>`).join('')}</div>`;
+                                optionsPreview = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">${['A','B','C','D'][idx]}.</b><span class="latex-content break-words whitespace-normal">${opt}</span></div>`).join('')}</div>`;
                             } else if (q.type === 'true_false') {
-                                optionsPreview = `<div class="grid grid-cols-1 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2 whitespace-nowrap">Ý ${['a','b','c','d'][idx]}:</b><span class="latex-content break-words whitespace-normal w-full">${opt}</span></div>`).join('')}</div>`;
+                                optionsPreview = `<div class="grid grid-cols-1 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2 whitespace-nowrap">Ý ${['a','b','c','d'][idx]}:</b><span class="latex-content break-words whitespace-normal">${opt}</span></div>`).join('')}</div>`;
                             }
                         }
 
@@ -1693,15 +1189,33 @@ ${tikzCode}
 
                         mediaHTML = `
                             <div class="w-full lg:flex-1 flex flex-col gap-2">
-                                <div class="text-sm text-gray-800 overflow-y-auto max-h-[550px] p-4 w-full latex-content border bg-gray-50 rounded">
-                                    ${q.qText}
-                                    ${userUploadedImages}
-                                    ${optionsPreview}
+                                <!-- CHẾ ĐỘ XEM BÌNH THƯỜNG -->
+                                <div id="view-mode-${q.id}" class="flex flex-col gap-2 w-full">
+                                    <div class="text-sm text-gray-800 overflow-y-auto max-h-[500px] p-4 w-full latex-content border bg-gray-50 rounded">
+                                        ${q.qText}
+                                        ${userUploadedImages}
+                                        ${optionsPreview}
+                                    </div>
+                                    <div class="text-sm text-gray-800 overflow-y-auto max-h-32 p-3 w-full latex-content border bg-green-50 rounded"><b>Lời giải: </b>${q.sText || 'Không có lời giải'}</div>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <button onclick="toggleEditMode('${q.id}', true)" class="btn !bg-white border border-blue-500 text-xs text-blue-700 px-3 py-1.5 hover:!bg-blue-50 shadow-sm flex items-center gap-1 font-bold transition-all">✏️ Sửa Nội Dung & Dán Ảnh (Ctrl+V)</button>
+                                        <button onclick="triggerImgUpload('${q.id}', 'qImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Ảnh Đề Bài (Cũ)</button>
+                                        <button onclick="triggerImgUpload('${q.id}', 'sImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Ảnh Lời Giải (Cũ)</button>
+                                    </div>
                                 </div>
-                                <div class="text-sm text-gray-800 overflow-y-auto max-h-48 p-3 w-full latex-content border bg-green-50 rounded"><b>Lời giải: </b>${q.sText || 'Không có lời giải'}</div>
-                                <div class="mt-2 flex flex-wrap gap-2">
-                                    <button onclick="triggerImgUpload('${q.id}', 'qImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Thêm/Đổi Ảnh Đề Bài</button>
-                                    <button onclick="triggerImgUpload('${q.id}', 'sImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Ảnh Lời Giải</button>
+
+                                <!-- CHẾ ĐỘ SỬA CHỮ VÀ DÁN ẢNH VÀO GIỮA -->
+                                <div id="edit-mode-${q.id}" class="hidden flex flex-col gap-2 w-full border border-blue-300 bg-blue-50/50 p-4 rounded-lg shadow-inner">
+                                    <div class="text-xs text-blue-800 mb-1 flex items-center gap-1"><span class="text-lg">📌</span> <b>Đề bài:</b> Đặt con trỏ vào vị trí muốn chèn và ấn <b>Ctrl + V</b> để dán ảnh.</div>
+                                    <textarea id="edit-qText-${q.id}" class="w-full h-40 p-3 border border-blue-300 rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none resize-y" onpaste="handleImagePaste(event, this)"></textarea>
+
+                                    <div class="text-xs text-green-800 mt-2 flex items-center gap-1"><span class="text-lg">📌</span> <b>Lời giải:</b> Đặt con trỏ vào vị trí muốn chèn và ấn <b>Ctrl + V</b> để dán ảnh.</div>
+                                    <textarea id="edit-sText-${q.id}" class="w-full h-32 p-3 border border-green-300 rounded text-sm font-mono focus:ring-2 focus:ring-green-500 outline-none resize-y" onpaste="handleImagePaste(event, this)"></textarea>
+
+                                    <div class="flex gap-3 mt-3">
+                                        <button onclick="saveEdit('${q.id}')" class="btn bg-blue-600 hover:bg-blue-700 text-white text-sm px-5 py-2 shadow-md">💾 Lưu Thay Đổi</button>
+                                        <button onclick="toggleEditMode('${q.id}', false)" class="btn bg-gray-500 hover:bg-gray-600 text-white text-sm px-5 py-2 shadow-md">❌ Hủy</button>
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -1818,6 +1332,7 @@ ${tikzCode}
                 await Promise.all(writePromises);
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', examId), { results: [] });
 
+                // ----- TẠO MÃ QR HIỂN THỊ LÊN MÀN HÌNH -----
                 const examLink = window.location.origin + window.location.pathname + "?exam=" + examId;
                 
                 customAlert(`
@@ -1980,7 +1495,7 @@ ${tikzCode}
                 if (q.type === 'mcq') {
                     if (q.is_latex && q.q_options && q.q_options.length > 0) {
                         inputHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                            ${['A','B','C','D'].map((opt, idx) => `<button type="button" onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn flex items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors text-left break-words whitespace-normal"><span class="font-bold mr-3 text-lg whitespace-nowrap">${opt}.</span><span class="latex-content text-gray-800 break-words w-full">${q.q_options[idx] || ''}</span></button>`).join('')}
+                            ${['A','B','C','D'].map((opt, idx) => `<button type="button" onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn flex items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors text-left break-words whitespace-normal"><span class="font-bold mr-3 text-lg whitespace-nowrap">${opt}.</span><span class="latex-content text-gray-800 break-words">${q.q_options[idx] || ''}</span></button>`).join('')}
                         </div><input type="hidden" id="ans-${i}">`;
                     } else {
                         inputHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">${['A','B','C','D'].map(opt => `<button type="button" onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn text-center justify-center flex font-bold text-lg p-4">${opt}</button>`).join('')}</div><input type="hidden" id="ans-${i}">`;
@@ -1989,7 +1504,7 @@ ${tikzCode}
                     inputHtml = `<div class="mt-4"><input type="text" id="ans-${i}" class="input-field py-4 text-center text-lg font-bold" placeholder="Nhập đáp án của bạn..." oninput="checkSAProgress(${i}, this)"></div>`;
                 } else if (q.type === 'true_false') {
                     if (q.is_latex && q.q_options && q.q_options.length > 0) {
-                        inputHtml = `<div class="mt-4 grid grid-cols-1 gap-3">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-white hover:bg-gray-50 cursor-pointer shadow-sm transition-colors" onclick="document.getElementById('tf-${i}-${j}').click()"><div class="flex items-start mr-4 w-full"><span class="font-bold text-gray-700 mr-3 whitespace-nowrap">Ý ${label}:</span><span class="latex-content text-gray-800 break-words whitespace-normal w-full">${q.q_options[j] || ''}</span></div><label class="inline-flex items-center cursor-pointer flex-shrink-0"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg text-gray-700">Đúng</span></label></div>`).join('')}</div>`;
+                        inputHtml = `<div class="mt-4 grid grid-cols-1 gap-3">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-white hover:bg-gray-50 cursor-pointer shadow-sm transition-colors" onclick="document.getElementById('tf-${i}-${j}').click()"><div class="flex items-start mr-4"><span class="font-bold text-gray-700 mr-3 whitespace-nowrap">Ý ${label}:</span><span class="latex-content text-gray-800 break-words whitespace-normal">${q.q_options[j] || ''}</span></div><label class="inline-flex items-center cursor-pointer flex-shrink-0"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg text-gray-700">Đúng</span></label></div>`).join('')}</div>`;
                     } else {
                         inputHtml = `<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer shadow-sm" onclick="document.getElementById('tf-${i}-${j}').click()"><span class="font-bold text-lg uppercase">Ý ${label}</span><label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg">Đúng</span></label></div>`).join('')}</div>`;
                     }
@@ -2176,6 +1691,7 @@ ${tikzCode}
                 document.getElementById('taking-exam').classList.add('hidden');
                 document.getElementById('student-result').classList.remove('hidden');
                 
+                // KIỂM TRA ẨN ĐIỂM Ở ĐÂY
                 if (currentExamData.view_score !== false) {
                     document.getElementById('score-display-box').classList.remove('hidden'); 
                     document.getElementById('score-hidden-msg').classList.add('hidden');
@@ -2197,9 +1713,9 @@ ${tikzCode}
                             let optionsHtml = '';
                             if (q.q_options && q.q_options.length > 0) {
                                 if (q.type === 'mcq') {
-                                    optionsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">${['A','B','C','D'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2">${opt}.</b><span class="latex-content w-full">${q.q_options[idx]}</span></div>`).join('')}</div>`;
+                                    optionsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">${['A','B','C','D'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2">${opt}.</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
                                 } else if (q.type === 'true_false') {
-                                    optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content w-full">${q.q_options[idx]}</span></div>`).join('')}</div>`;
+                                    optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
                                 }
                             }
                             let fallbackImg = '';
@@ -2393,6 +1909,7 @@ ${tikzCode}
             modal.classList.remove('hidden');
 
             try {
+                // Lấy dữ liệu của câu hỏi từ Firebase dựa vào mã đề và index
                 const qDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_questions', `${examId}_${qIndex}`));
                 
                 if (!qDoc.exists()) {
@@ -2403,16 +1920,17 @@ ${tikzCode}
                 const q = qDoc.data();
                 let mediaHtml = '';
                 
+                // Logic render câu hỏi tương tự như phần xem lại bài của học sinh
                 if (q.is_latex) {
                     let optionsHtml = '';
                     if (q.q_options && q.q_options.length > 0) {
                         if (q.type === 'mcq') {
                             optionsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">${['A','B','C','D'].map((opt, idx) => {
                                 const isAns = String(q.answer).toUpperCase() === opt;
-                                return `<div class="p-3 border-2 rounded-lg ${isAns ? 'bg-green-50 border-green-400 shadow-sm' : 'bg-gray-50 border-gray-100'} flex"><b class="mr-2 ${isAns ? 'text-green-700' : ''}">${opt}.</b><span class="latex-content w-full ${isAns ? 'font-medium' : ''}">${q.q_options[idx]}</span>${isAns ? '<span class="ml-auto text-green-600">✅</span>' : ''}</div>`
+                                return `<div class="p-3 border-2 rounded-lg ${isAns ? 'bg-green-50 border-green-400 shadow-sm' : 'bg-gray-50 border-gray-100'} flex"><b class="mr-2 ${isAns ? 'text-green-700' : ''}">${opt}.</b><span class="latex-content ${isAns ? 'font-medium' : ''}">${q.q_options[idx]}</span>${isAns ? '<span class="ml-auto text-green-600">✅</span>' : ''}</div>`
                             }).join('')}</div>`;
                         } else if (q.type === 'true_false') {
-                            optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-4 border rounded-lg bg-gray-50 flex justify-between items-center"><div class="flex w-full"><b class="mr-3 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content w-full">${q.q_options[idx]}</span></div><span class="font-bold text-lg px-3 py-1 rounded bg-white shadow-sm text-primary border">${q.answers && q.answers[idx] ? q.answers[idx] : ''}</span></div>`).join('')}</div>`;
+                            optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-4 border rounded-lg bg-gray-50 flex justify-between items-center"><div class="flex"><b class="mr-3 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div><span class="font-bold text-lg px-3 py-1 rounded bg-white shadow-sm text-primary border">${q.answers && q.answers[idx] ? q.answers[idx] : ''}</span></div>`).join('')}</div>`;
                         }
                     }
                     
@@ -2429,6 +1947,7 @@ ${tikzCode}
                         mediaHtml += `<div class="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl"><b class="text-green-800">Đáp án chính xác:</b> <span class="font-bold text-lg text-green-700 ml-2">${q.answer}</span></div>`;
                     }
                 } else {
+                    // Nếu là câu hỏi Ảnh
                     mediaHtml = `
                         <div class="p-4 border rounded-xl shadow-sm bg-gray-50 mb-4">
                             <h4 class="font-bold text-gray-700 mb-2">Đề bài:</h4>
@@ -2443,6 +1962,7 @@ ${tikzCode}
 
                 contentDiv.innerHTML = mediaHtml;
                 
+                // Gọi MathJax để render lại công thức Toán học trong Popup
                 setTimeout(() => { 
                     if (window.MathJax) MathJax.typesetPromise([contentDiv]); 
                 }, 100);
