@@ -172,11 +172,11 @@
                     
                     <div class="bg-purple-50 p-6 rounded-xl border border-purple-200 mb-6">
                         <h3 class="text-lg font-bold text-purple-800 mb-4 flex items-center gap-2">
-                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX
+                            🔤 Nhập Câu Hỏi Bằng Mã LaTeX (Chế Độ Đồ Thị OFFLINE)
                         </h3>
                         <p class="text-xs text-purple-700 mb-3">
-                            - <b>TỰ ĐỘNG XỬ LÝ ẢNH:</b> Các đoạn mã TikZ sẽ tự động được gửi đi biên dịch thành ảnh và chèn vào giữa đề bài. Vui lòng đợi trong giây lát khi ấn phân tích.<br>
-                            - Đảm bảo mã của bạn có cấu trúc \begin{ex} ... \end{ex}
+                            - <b>KHÔNG CẦN MẠNG NGOÀI:</b> Hệ thống sẽ phân tích hàm số và tọa độ TikZ trực tiếp bằng JavaScript để vẽ đồ thị vector (SVG) ngay trên máy bạn.<br>
+                            - Siêu mượt, không bao giờ lo lỗi Server!
                         </p>
                         <textarea id="latex-input" class="w-full h-40 p-3 border border-purple-300 rounded-lg outline-none focus:border-purple-500 font-mono text-sm" placeholder="Dán mã LaTeX của bạn vào đây (Có chứa \begin{ex} ... \end{ex})..."></textarea>
                         <div class="mt-4 text-right">
@@ -978,88 +978,11 @@
             return { type, ans, qText: formatLatexMath(qText, qId), sText: formatLatexMath(sText, qId), options: parsedOptions, isLatex: true };
         };
 
-        // --- TÍNH NĂNG TỰ ĐỘNG BIÊN DỊCH TIKZ THÀNH ẢNH BASE64 (DÙNG API QUICKLATEX) ---
-        window.compileTikzToImageViaAPI = async (tikzCode) => {
-            // Nâng cấp preamble SIÊU TO KHỔNG LỒ để hỗ trợ FULL bộ thư viện của Mathcha
-            const preamble = `\\usepackage{amsmath}\n\\usepackage{amsfonts}\n\\usepackage{amssymb}\n\\usepackage{xcolor}\n\\usepackage{tikz}\n\\usetikzlibrary{calc,angles,quotes,patterns,arrows.meta,decorations.markings,decorations.pathreplacing,fadings,3d,intersections,positioning,shapes.geometric}\n\\usepackage{tkz-euclide}\n\\usepackage{tkz-tab}\n\\usepackage{pgfplots}\n\\pgfplotsset{compat=1.15}`;
-
-            const params = new URLSearchParams();
-            params.append('formula', tikzCode);
-            params.append('fsize', '18'); // Kích thước font
-            params.append('fcolor', '000000');
-            params.append('mode', '0');
-            params.append('out', '1');
-            params.append('preamble', preamble);
-
-            try {
-                // Gọi API của QuickLaTeX để biên dịch
-                const response = await fetch('https://quicklatex.com/latex3.f', {
-                    method: 'POST',
-                    body: params
-                });
-                const text = await response.text();
-                const lines = text.split('\n');
-                
-                // QuickLaTeX trả về URL ảnh ở dòng thứ 2 nếu thành công
-                if (lines.length > 1 && lines[1].startsWith('http')) {
-                    const imgUrl = lines[1];
-                    // Tải ảnh về và chuyển sang Base64
-                    const imgResponse = await fetch(imgUrl);
-                    const blob = await imgResponse.blob();
-                    return await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                    });
-                } else {
-                    console.error("Lỗi từ QuickLaTeX (Có thể do lỗi cú pháp TikZ):", text);
-                }
-            } catch (e) {
-                console.error("Lỗi mất kết nối với QuickLaTeX API:", e);
-            }
-            return null; // Trả về null nếu thất bại
-        };
-
-        window.autoConvertTikzToBase64 = async (text) => {
-            const regex = /\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/g;
-            let match;
-            const matches = [];
-            while ((match = regex.exec(text)) !== null) {
-                matches.push(match[0]);
-            }
-
-            if(matches.length === 0) return text;
-
-            // Hiển thị thông báo đang biên dịch
-            document.getElementById('latex-input').value = `Đang phát hiện ${matches.length} hình vẽ TikZ.\nHệ thống đang kết nối Server để biên dịch tự động thành ảnh...\nVui lòng đợi vài giây!`;
-
-            for (let i = 0; i < matches.length; i++) {
-                const tikzCode = matches[i];
-                const base64Img = await compileTikzToImageViaAPI(tikzCode);
-                
-                if (base64Img) {
-                    // Căn giữa ảnh bằng flex và chèn base64
-                    const imgHtml = `<div class="w-full flex justify-center items-center my-4"><img src="${base64Img}" class="max-h-80 w-auto object-contain bg-white rounded shadow-sm border border-gray-200" alt="TikZ Graph"></div>`;
-                    text = text.replace(tikzCode, imgHtml);
-                } else {
-                    console.warn("Không thể biên dịch đoạn TikZ:", tikzCode);
-                }
-            }
-            return text;
-        };
-
-        window.processLatexEntry = async (btn) => {
-            let text = document.getElementById('latex-input').value;
+        window.processLatexEntry = (btn) => {
+            const text = document.getElementById('latex-input').value;
             if (!text.trim()) return customAlert("Vui lòng dán mã LaTeX!");
-            
-            btn.disabled = true; 
-            btn.innerHTML = `<span class="animate-spin inline-block mr-2">⚙️</span> Đang xử lý TikZ...`;
-
+            btn.disabled = true; btn.innerText = "Đang xử lý...";
             try {
-                // 1. CHẠY BỘ TIỀN XỬ LÝ: Tự động quét TikZ -> Gửi lên API -> Nhận Base64 -> Thay thế text
-                text = await autoConvertTikzToBase64(text);
-
-                // 2. BẮT ĐẦU BÓC TÁCH CÂU HỎI NHƯ BÌNH THƯỜNG
                 const regex = /\\begin\{ex\}([\s\S]*?)\\end\{ex\}/g;
                 let match; let count = 0;
                 while ((match = regex.exec(text)) !== null) {
@@ -1073,22 +996,13 @@
                         count++;
                     }
                 }
-                
                 if (count > 0) {
                     document.getElementById('latex-input').value = '';
                     renderQBankUI();
-                    customAlert(`Đã phân tích và thêm thành công ${count} câu hỏi từ LaTeX! (Các hình TikZ đã được tự động render thành ảnh).`);
-                } else { 
-                    customAlert("Không tìm thấy câu hỏi nào hợp lệ. Đảm bảo cấu trúc có \\begin{ex} và \\end{ex}."); 
-                    document.getElementById('latex-input').value = text; // Trả lại text nếu lỗi
-                }
-            } catch (e) { 
-                console.error(e); 
-                customAlert("Lỗi xử lý LaTeX: " + e.message); 
-            } finally { 
-                btn.disabled = false; 
-                btn.innerHTML = "✍️ Phân Tích & Thêm Vào Ngân Hàng"; 
-            }
+                    customAlert(`Đã phân tích và thêm thành công ${count} câu hỏi từ LaTeX!`);
+                } else { customAlert("Không tìm thấy câu hỏi nào hợp lệ. Đảm bảo cấu trúc có \\begin{ex} và \\end{ex}."); }
+            } catch (e) { console.error(e); customAlert("Lỗi xử lý LaTeX: " + e.message); } 
+            finally { btn.disabled = false; btn.innerText = "✍️ Phân Tích & Thêm Vào Ngân Hàng"; }
         };
 
         /* --- XỬ LÝ NGÂN HÀNG CÂU HỎI (ẢNH + EXCEL) --- */
@@ -1166,4 +1080,997 @@
         window.updateQBankItem = (id, field, value) => { 
             const item = window.qBank.find(q => q.id === id); 
             if(item) { 
-                item
+                item[field] = value; 
+                if (field === 'type') {
+                    if (value === 'mcq') item.ans = 'A';
+                    else if (value === 'true_false') item.ans = 'ĐSĐS';
+                    else item.ans = '';
+                    renderQBankUI();
+                }
+                else if (item.isLatex && (field === 'qImg' || field === 'sImg')) { renderQBankUI(); } 
+            } 
+        }
+
+        window.triggerImgUpload = (id, field) => {
+            const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
+            input.onchange = async (e) => {
+                if(e.target.files[0]) {
+                    const b64 = await fileToBase64(e.target.files[0]); 
+                    updateQBankItem(id, field, b64);
+                    const imgEl = document.getElementById(`img-${field}-${id}`);
+                    if(imgEl) { imgEl.src = 'data:image/png;base64,' + b64; imgEl.classList.remove('hidden'); }
+                }
+            };
+            input.click();
+        }
+
+        // --- TÍNH NĂNG MỚI: CHỈNH SỬA VÀ DÁN ẢNH INLINE (CTRL+V) ---
+        window.toggleEditMode = (id, showEdit) => {
+            const viewEl = document.getElementById(`view-mode-${id}`);
+            const editEl = document.getElementById(`edit-mode-${id}`);
+            if (showEdit) {
+                const q = window.qBank.find(item => item.id === id);
+                document.getElementById(`edit-qText-${id}`).value = q.qText;
+                document.getElementById(`edit-sText-${id}`).value = q.sText || '';
+                viewEl.classList.add('hidden');
+                editEl.classList.remove('hidden');
+            } else {
+                viewEl.classList.remove('hidden');
+                editEl.classList.add('hidden');
+            }
+        };
+
+        window.saveEdit = (id) => {
+            const q = window.qBank.find(item => item.id === id);
+            if (q) {
+                q.qText = document.getElementById(`edit-qText-${id}`).value;
+                q.sText = document.getElementById(`edit-sText-${id}`).value;
+                renderQBankUI(); // Render lại giao diện và MathJax
+            }
+        };
+
+        window.handleImagePaste = (e, textarea) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let index in items) {
+                const item = items[index];
+                // Kiểm tra xem dữ liệu dán vào có phải là ảnh không
+                if (item.kind === 'file' && item.type.includes('image/')) {
+                    e.preventDefault(); // Chặn hành vi dán text mặc định
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const base64Img = event.target.result;
+                        // Tạo thẻ img HTML với base64 để chèn thẳng vào chữ
+                        const imgTag = `<br><img src="${base64Img}" class="max-h-64 w-auto object-contain inline-block my-2 border border-gray-300 rounded shadow-sm" alt="Ảnh minh họa"><br>`;
+                        
+                        // Lấy vị trí con trỏ hiện tại trong khung text
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+                        
+                        // Chèn mã ảnh vào vị trí con trỏ
+                        textarea.value = textarea.value.substring(0, start) + imgTag + textarea.value.substring(end);
+                        
+                        // Đẩy con trỏ ra phía sau ảnh vừa chèn
+                        textarea.selectionStart = textarea.selectionEnd = start + imgTag.length;
+                    };
+                    reader.readAsDataURL(blob);
+                    break; // Xử lý 1 ảnh là đủ
+                }
+            }
+        };
+
+        window.renderQBankUI = () => {
+            const container = document.getElementById('questions-list-container');
+            const emptyState = document.getElementById('empty-state');
+            
+            let countTN = 0, countTF = 0, countSA = 0; container.innerHTML = '';
+            
+            if(window.qBank.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                window.qBank.forEach((q, index) => {
+                    if(q.type === 'mcq') countTN++; else if(q.type === 'true_false') countTF++; else countSA++;
+                    
+                    let mediaHTML = '';
+                    if (q.isLatex) {
+                        let optionsPreview = '';
+                        if (q.options && q.options.length > 0) {
+                            if (q.type === 'mcq') {
+                                optionsPreview = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2">${['A','B','C','D'][idx]}.</b><span class="latex-content break-words whitespace-normal">${opt}</span></div>`).join('')}</div>`;
+                            } else if (q.type === 'true_false') {
+                                optionsPreview = `<div class="grid grid-cols-1 gap-2 mt-3">${q.options.map((opt, idx) => `<div class="text-sm p-3 bg-white border rounded shadow-sm flex"><b class="mr-2 whitespace-nowrap">Ý ${['a','b','c','d'][idx]}:</b><span class="latex-content break-words whitespace-normal">${opt}</span></div>`).join('')}</div>`;
+                            }
+                        }
+
+                        let userUploadedImages = '';
+                        if (q.qImg) userUploadedImages += `<img id="img-qImg-${q.id}" src="data:image/png;base64,${q.qImg}" class="max-h-64 object-contain my-3 rounded border mx-auto shadow-sm block w-full md:w-auto">`;
+                        if (q.sImg) userUploadedImages += `<div class="mt-2 text-center"><b class="text-sm text-green-700">Ảnh lời giải bổ sung:</b><br><img id="img-sImg-${q.id}" src="data:image/png;base64,${q.sImg}" class="max-h-64 object-contain my-2 rounded border mx-auto shadow-sm w-full md:w-auto"></div>`;
+
+                        mediaHTML = `
+                            <div class="w-full lg:flex-1 flex flex-col gap-2">
+                                <!-- CHẾ ĐỘ XEM BÌNH THƯỜNG -->
+                                <div id="view-mode-${q.id}" class="flex flex-col gap-2 w-full">
+                                    <div class="text-sm text-gray-800 overflow-y-auto max-h-[500px] p-4 w-full latex-content border bg-gray-50 rounded">
+                                        ${q.qText}
+                                        ${userUploadedImages}
+                                        ${optionsPreview}
+                                    </div>
+                                    <div class="text-sm text-gray-800 overflow-y-auto max-h-32 p-3 w-full latex-content border bg-green-50 rounded"><b>Lời giải: </b>${q.sText || 'Không có lời giải'}</div>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <button onclick="toggleEditMode('${q.id}', true)" class="btn !bg-white border border-blue-500 text-xs text-blue-700 px-3 py-1.5 hover:!bg-blue-50 shadow-sm flex items-center gap-1 font-bold transition-all">✏️ Sửa Nội Dung & Dán Ảnh (Ctrl+V)</button>
+                                        <button onclick="triggerImgUpload('${q.id}', 'qImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Ảnh Đề Bài (Cũ)</button>
+                                        <button onclick="triggerImgUpload('${q.id}', 'sImg')" class="btn !bg-white border border-gray-300 text-xs text-gray-700 px-3 py-1.5 hover:!bg-gray-100 shadow-sm flex items-center gap-1">📷 Ảnh Lời Giải (Cũ)</button>
+                                    </div>
+                                </div>
+
+                                <!-- CHẾ ĐỘ SỬA CHỮ VÀ DÁN ẢNH VÀO GIỮA -->
+                                <div id="edit-mode-${q.id}" class="hidden flex flex-col gap-2 w-full border border-blue-300 bg-blue-50/50 p-4 rounded-lg shadow-inner">
+                                    <div class="text-xs text-blue-800 mb-1 flex items-center gap-1"><span class="text-lg">📌</span> <b>Đề bài:</b> Đặt con trỏ vào vị trí muốn chèn và ấn <b>Ctrl + V</b> để dán ảnh.</div>
+                                    <textarea id="edit-qText-${q.id}" class="w-full h-40 p-3 border border-blue-300 rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none resize-y" onpaste="handleImagePaste(event, this)"></textarea>
+
+                                    <div class="text-xs text-green-800 mt-2 flex items-center gap-1"><span class="text-lg">📌</span> <b>Lời giải:</b> Đặt con trỏ vào vị trí muốn chèn và ấn <b>Ctrl + V</b> để dán ảnh.</div>
+                                    <textarea id="edit-sText-${q.id}" class="w-full h-32 p-3 border border-green-300 rounded text-sm font-mono focus:ring-2 focus:ring-green-500 outline-none resize-y" onpaste="handleImagePaste(event, this)"></textarea>
+
+                                    <div class="flex gap-3 mt-3">
+                                        <button onclick="saveEdit('${q.id}')" class="btn bg-blue-600 hover:bg-blue-700 text-white text-sm px-5 py-2 shadow-md">💾 Lưu Thay Đổi</button>
+                                        <button onclick="toggleEditMode('${q.id}', false)" class="btn bg-gray-500 hover:bg-gray-600 text-white text-sm px-5 py-2 shadow-md">❌ Hủy</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        mediaHTML = `
+                            <div class="w-full lg:w-1/4 flex gap-2 items-center border rounded p-2 bg-white">
+                                <img id="img-qImg-${q.id}" src="${q.qImg ? 'data:image/png;base64,'+q.qImg : 'https://via.placeholder.com/150?text=Trống'}" class="h-12 w-24 object-contain rounded">
+                                <button onclick="triggerImgUpload('${q.id}', 'qImg')" class="btn !bg-white border text-sm text-gray-700 px-3 py-1 hover:!bg-gray-100 shadow-sm">Đổi</button>
+                            </div>
+                            <div class="w-full lg:w-1/4 flex gap-2 items-center border rounded p-2 bg-white">
+                                <img id="img-sImg-${q.id}" src="${q.sImg ? 'data:image/png;base64,'+q.sImg : 'https://via.placeholder.com/150?text=Trống'}" class="h-12 w-24 object-contain rounded">
+                                <button onclick="triggerImgUpload('${q.id}', 'sImg')" class="btn !bg-white border text-sm text-gray-700 px-3 py-1 hover:!bg-gray-100 shadow-sm">Đổi</button>
+                            </div>
+                        `;
+                    }
+
+                    const div = document.createElement('div');
+                    div.className = "flex flex-col lg:flex-row gap-4 py-4 px-4 items-center bg-white hover:bg-gray-50 transition-colors";
+                    div.innerHTML = `
+                        <div class="w-full lg:w-24 font-bold text-gray-700">Câu ${index + 1}</div>
+                        <div class="w-full lg:w-40">
+                            <label class="text-xs text-gray-500 block lg:hidden mb-1">Loại câu</label>
+                            <select class="input-field text-sm" onchange="updateQBankItem('${q.id}', 'type', this.value)">
+                                <option value="mcq" ${q.type==='mcq'?'selected':''}>Trắc nghiệm</option>
+                                <option value="true_false" ${q.type==='true_false'?'selected':''}>Đúng/Sai</option>
+                                <option value="short_answer" ${q.type==='short_answer'?'selected':''}>Trả lời ngắn</option>
+                            </select>
+                        </div>
+                        <div class="w-full lg:w-32">
+                            <label class="text-xs text-gray-500 block lg:hidden mb-1">Đáp án</label>
+                            <input type="text" class="input-field text-sm font-bold text-center" value="${q.ans}" onchange="updateQBankItem('${q.id}', 'ans', this.value.toUpperCase())">
+                        </div>
+                        ${mediaHTML}
+                        <div class="w-full lg:w-auto ml-auto text-right">
+                            <button onclick="deleteQuestion('${q.id}')" class="text-red-500 border border-red-200 px-3 py-1 rounded hover:bg-red-50 text-sm font-semibold transition-colors">Xoá</button>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            document.getElementById('total-q-badge').innerText = window.qBank.length;
+            document.getElementById('q-stats-text').innerText = `Đang có ${window.qBank.length} câu: ${countTN} trắc nghiệm, ${countTF} đúng/sai, ${countSA} trả lời ngắn.`;
+            document.getElementById('stat-tn').innerText = countTN; document.getElementById('stat-tf').innerText = countTF; document.getElementById('stat-sa').innerText = countSA;
+            
+            document.getElementById('pick-tn').max = countTN; document.getElementById('pick-tn').value = countTN;
+            document.getElementById('pick-tf').max = countTF; document.getElementById('pick-tf').value = countTF;
+            document.getElementById('pick-sa').max = countSA; document.getElementById('pick-sa').value = countSA;
+
+            setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
+        }
+
+        window.saveExam = async (btnElement) => {
+            const btn = btnElement; btn.disabled = true; btn.innerText = "Đang xử lý...";
+            if (!isFirebaseConfigured()) { customAlert("Lỗi: Firebase chưa được cấu hình."); btn.disabled = false; return; }
+
+            try {
+                const tName = document.getElementById('t-name').value.trim();
+                const tTime = document.getElementById('t-time').value;
+                const tMaxAttempts = document.getElementById('t-max-attempts').value;
+                if (!tName) throw new Error("Vui lòng nhập tên giáo viên.");
+                
+                const pickTN = parseInt(document.getElementById('pick-tn').value) || 0;
+                const pickTF = parseInt(document.getElementById('pick-tf').value) || 0;
+                const pickSA = parseInt(document.getElementById('pick-sa').value) || 0;
+                const totalPick = pickTN + pickTF + pickSA;
+                
+                if (totalPick === 0) throw new Error("Tổng số câu bốc ra phải lớn hơn 0.");
+                if (window.qBank.length === 0) throw new Error("Ngân hàng câu hỏi đang trống.");
+
+                const bankToUpload = window.qBank.map(q => {
+                    if (!q.qImg && !q.isLatex) throw new Error("Có câu hỏi bị thiếu ảnh/nội dung đề bài!");
+                    
+                    let answerData = {};
+                    if (q.type === 'mcq' || q.type === 'short_answer') {
+                        answerData = { answer: String(q.ans || '').trim().toUpperCase() };
+                    } else if (q.type === 'true_false') {
+                        answerData = { answers: String(q.ans || '').replace(/[^ĐS]/gi, '').toUpperCase().split('') };
+                    }
+
+                    return { 
+                        type: q.type || 'mcq', 
+                        img_data: q.qImg || '', 
+                        da_img_data: q.sImg || '', 
+                        is_latex: q.isLatex || false, 
+                        q_text: q.qText || '', 
+                        s_text: q.sText || '', 
+                        q_options: q.options || [], 
+                        ...answerData 
+                    };
+                });
+
+                const scoring = {
+                    mcq: parseFloat(document.getElementById('score-mcq').value) || 0, 
+                    sa: parseFloat(document.getElementById('score-sa').value) || 0,
+                    tf_1: parseFloat(document.getElementById('score-tf1').value) || 0, 
+                    tf_2: parseFloat(document.getElementById('score-tf2').value) || 0,
+                    tf_3: parseFloat(document.getElementById('score-tf3').value) || 0, 
+                    tf_4: parseFloat(document.getElementById('score-tf4').value) || 0,
+                };
+
+                const examId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                
+                const examMetadata = {
+                    teacher: tName, time: parseInt(tTime), max_attempts: parseInt(tMaxAttempts) || 1,
+                    start_time: document.getElementById('t-start-time').value || null, end_time: document.getElementById('t-end-time').value || null,
+                    allow_review: document.getElementById('t-review').checked, view_score: document.getElementById('t-show-score').checked,
+                    scoring, bank_count: bankToUpload.length, question_count: totalPick,
+                    pick_rules: { mcq: pickTN, true_false: pickTF, short_answer: pickSA }, created_at: new Date().toISOString()
+                };
+                
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_exams', examId), examMetadata);
+                const writePromises = bankToUpload.map((q, index) => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_questions', `${examId}_${index}`), q));
+                await Promise.all(writePromises);
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', examId), { results: [] });
+
+                // ----- TẠO MÃ QR HIỂN THỊ LÊN MÀN HÌNH -----
+                const examLink = window.location.origin + window.location.pathname + "?exam=" + examId;
+                
+                customAlert(`
+                    <p class="mb-2 font-semibold">✅ Tạo Ngân hàng và Mã đề thành công!</p>
+                    <p class="text-xl font-extrabold text-primary p-2 bg-gray-100 rounded-lg border mb-3">MÃ ĐỀ: ${examId}</p>
+                    
+                    <div class="flex flex-col items-center bg-blue-50 p-3 rounded-xl border border-blue-200">
+                        <p class="text-sm font-bold text-blue-800 mb-2">Mã QR cho học sinh vào thi:</p>
+                        <div id="qr-code-container" class="bg-white p-2 rounded-lg shadow-sm"></div>
+                        <p class="text-xs text-blue-600 mt-2 text-center break-all w-full font-mono">${examLink}</p>
+                    </div>
+                    
+                    <p class="mt-3 text-xs text-gray-500">Đề sẽ bốc ngẫu nhiên ${totalPick} câu cho mỗi học sinh.</p>
+                `, "THÀNH CÔNG", () => { window.location.href = window.location.pathname; });
+
+                setTimeout(() => {
+                    new QRCode(document.getElementById("qr-code-container"), {
+                        text: examLink,
+                        width: 160,
+                        height: 160,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                }, 100);
+
+            } catch (e) { customAlert(e.message, "Lỗi Lưu Đề Thi"); btn.disabled = false; btn.innerText = "💾 LƯU & TẠO MÃ ĐỀ NGẪU NHIÊN"; }
+        }
+
+        /* --- XỬ LÝ LÀM BÀI PHÍA HỌC SINH --- */
+        window.checkExam = async () => {
+            if (!isFirebaseConfigured()) return customAlert("Lỗi: Firebase chưa được cấu hình.");
+            const examId = document.getElementById('s-exam-id').value.trim().toUpperCase();
+            if (!examId) return customAlert("Vui lòng nhập mã đề");
+            
+            const btn = document.getElementById('btn-check-exam'); 
+            if (btn) { btn.innerText = "Đang kiểm tra..."; btn.disabled = true; }
+
+            try {
+                const docSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_exams', examId));
+                if (!docSnap.exists()) throw new Error("Mã đề không tồn tại");
+
+                currentExamData = docSnap.data();
+                currentExamData.id = examId; 
+                
+                const now = new Date();
+                if (currentExamData.start_time && now < new Date(currentExamData.start_time)) throw new Error("Đề thi chưa mở.");
+                if (currentExamData.end_time && now > new Date(currentExamData.end_time)) throw new Error("Đề thi đã đóng.");
+
+                const attemptKey = `itex_attempt_${examId}`;
+                let currentAttempts = parseInt(localStorage.getItem(attemptKey)) || 0;
+                const maxAttempts = currentExamData.max_attempts || 1;
+                const remaining = maxAttempts - currentAttempts;
+
+                let attemptMsg = "";
+                const btnStart = document.getElementById('btn-start-exam');
+
+                if (remaining <= 0) {
+                    attemptMsg = `<div class="text-red-600 font-bold text-sm mt-1">⛔ Thiết bị này đã hết lượt vào thi (${maxAttempts}/${maxAttempts} lần).</div>`;
+                    btnStart.disabled = true; btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    attemptMsg = `<div class="text-[#2563EB] font-bold text-sm mt-1">Lưu ý: Thiết bị này còn ${remaining} lượt đăng nhập.</div>`;
+                    btnStart.disabled = false; btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+
+                let timeLimitMsg = "";
+                if (currentExamData.end_time) {
+                    const et = new Date(currentExamData.end_time);
+                    const timeStr = `${et.getHours().toString().padStart(2,'0')}:${et.getMinutes().toString().padStart(2,'0')}:${et.getSeconds().toString().padStart(2,'0')} ${et.getDate()}/${et.getMonth()+1}/${et.getFullYear()}`;
+                    timeLimitMsg = `<div class="text-[#DC2626] text-sm font-semibold mt-1">⏰ Hạn chót thu bài: ${timeStr}</div>`;
+                }
+
+                document.getElementById('student-entry').classList.add('hidden');
+                document.getElementById('student-info-form').classList.remove('hidden');
+
+                document.getElementById('exam-info-display').innerHTML = `
+                    <div class="text-[#14BC9C] font-bold text-lg">Đề của GV: ${currentExamData.teacher}</div>
+                    <div class="text-[#14BC9C] font-semibold text-md mt-1">Thời gian làm bài: ${currentExamData.time} phút</div>
+                    ${timeLimitMsg}
+                    ${attemptMsg}
+                `;
+
+            } catch (e) { 
+                customAlert(e.message, "KHÔNG THỂ VÀO THI"); 
+            } 
+            finally { 
+                if (btn) { btn.disabled = false; btn.innerText = "Kiểm Tra Mã Đề"; } 
+            }
+        }
+
+        window.startExam = async (event) => {
+            const sbd = document.getElementById('s-sbd').value.trim();
+            const name = document.getElementById('s-name').value.trim();
+            const school = document.getElementById('s-school').value.trim();
+            const sClass = document.getElementById('s-class').value.trim();
+            if (!sbd || !name) return customAlert("Vui lòng điền tối thiểu SBD và Họ tên học sinh");
+            
+            const btn = event.target; btn.innerText = "Đang lấy đề ngẫu nhiên..."; btn.disabled = true;
+
+            try {
+                const attemptKey = `itex_attempt_${currentExamData.id}`;
+                let currentAttempts = parseInt(localStorage.getItem(attemptKey)) || 0;
+                const maxAttempts = currentExamData.max_attempts || 1;
+                
+                if (currentAttempts >= maxAttempts) {
+                    return customAlert(`Thiết bị của bạn đã hết lượt truy cập vào mã đề này (Tối đa ${maxAttempts} lần).`, "HẾT LƯỢT THI");
+                }
+
+                const qPromises = [];
+                for(let i=0; i<currentExamData.bank_count; i++) qPromises.push(getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_questions', `${currentExamData.id}_${i}`)));
+                const qSnaps = await Promise.all(qPromises);
+                const bankQuestions = qSnaps.map(s => s.data());
+
+                const groups = { mcq: [], true_false: [], short_answer: [] };
+                bankQuestions.forEach((q, idx) => { groups[q.type].push({ ...q, originalIdx: idx }); });
+                
+                const shuffle = (arr) => arr.sort(() => Math.random() - 0.5);
+                const rules = currentExamData.pick_rules;
+                
+                currentExamData.shuffledQuestions = [
+                    ...shuffle(groups.mcq).slice(0, rules.mcq),
+                    ...shuffle(groups.true_false).slice(0, rules.true_false),
+                    ...shuffle(groups.short_answer).slice(0, rules.short_answer)
+                ];
+
+                window.currentSessionId = 'session_' + new Date().getTime() + '_' + Math.random().toString(36).substring(2, 7);
+                window.currentProgress = new Array(currentExamData.question_count).fill(false);
+                
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                    sbd: sbd, name: name, class_: sClass, status: 'testing', progress: window.currentProgress, violation_count: 0, updatedAt: new Date().toISOString()
+                });
+
+                localStorage.setItem(attemptKey, currentAttempts + 1);
+
+                document.getElementById('student-info-form').classList.add('hidden');
+                document.getElementById('taking-exam').classList.remove('hidden');
+                document.getElementById('display-s-name').innerText = name;
+                document.getElementById('display-s-sbd').innerText = sbd;
+
+                violationCount = 0;
+                enterFullscreen(); 
+                document.addEventListener("visibilitychange", handleVisibilityChange);
+                examStartTime = new Date(); 
+                isExamInProgress = true;
+                baseScreenHeight = window.innerHeight;
+
+                renderStudentQuestions();
+                startTimer(currentExamData.time);
+                initUnansweredTracker(currentExamData.question_count);
+
+            } catch(e) { customAlert("Lỗi tải đề thi: " + e.message); btn.innerText = "🚀 BẮT ĐẦU LÀM BÀI"; btn.disabled = false; }
+        }
+
+        const renderStudentQuestions = () => {
+            const container = document.getElementById('exam-questions-render');
+            container.innerHTML = '';
+            
+            currentExamData.shuffledQuestions.forEach((q, i) => {
+                let inputHtml = '';
+                if (q.type === 'mcq') {
+                    if (q.is_latex && q.q_options && q.q_options.length > 0) {
+                        inputHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            ${['A','B','C','D'].map((opt, idx) => `<button type="button" onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn flex items-center p-4 border rounded-xl hover:bg-gray-50 transition-colors text-left break-words whitespace-normal"><span class="font-bold mr-3 text-lg whitespace-nowrap">${opt}.</span><span class="latex-content text-gray-800 break-words">${q.q_options[idx] || ''}</span></button>`).join('')}
+                        </div><input type="hidden" id="ans-${i}">`;
+                    } else {
+                        inputHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">${['A','B','C','D'].map(opt => `<button type="button" onclick="selectMCQ(${i}, '${opt}')" id="btn-mcq-${i}-${opt}" class="option-btn text-center justify-center flex font-bold text-lg p-4">${opt}</button>`).join('')}</div><input type="hidden" id="ans-${i}">`;
+                    }
+                } else if (q.type === 'short_answer') {
+                    inputHtml = `<div class="mt-4"><input type="text" id="ans-${i}" class="input-field py-4 text-center text-lg font-bold" placeholder="Nhập đáp án của bạn..." oninput="checkSAProgress(${i}, this)"></div>`;
+                } else if (q.type === 'true_false') {
+                    if (q.is_latex && q.q_options && q.q_options.length > 0) {
+                        inputHtml = `<div class="mt-4 grid grid-cols-1 gap-3">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-white hover:bg-gray-50 cursor-pointer shadow-sm transition-colors" onclick="document.getElementById('tf-${i}-${j}').click()"><div class="flex items-start mr-4"><span class="font-bold text-gray-700 mr-3 whitespace-nowrap">Ý ${label}:</span><span class="latex-content text-gray-800 break-words whitespace-normal">${q.q_options[j] || ''}</span></div><label class="inline-flex items-center cursor-pointer flex-shrink-0"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg text-gray-700">Đúng</span></label></div>`).join('')}</div>`;
+                    } else {
+                        inputHtml = `<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">${['a','b','c','d'].map((label, j) => `<div class="flex items-center justify-between border p-4 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer shadow-sm" onclick="document.getElementById('tf-${i}-${j}').click()"><span class="font-bold text-lg uppercase">Ý ${label}</span><label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="tf-${i}-${j}" class="form-checkbox w-6 h-6 text-primary rounded" onclick="event.stopPropagation(); checkTFProgress(${i})"><span class="ml-3 font-semibold text-lg">Đúng</span></label></div>`).join('')}</div>`;
+                    }
+                }
+
+                let mediaHtml = '';
+                if (q.is_latex) {
+                    let fallbackImg = '';
+                    if (q.img_data) { fallbackImg = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mt-4 mx-auto shadow-sm block w-full md:w-auto">`; }
+                    mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-blue-50/50 rounded-xl latex-content border border-blue-100 leading-relaxed shadow-sm block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}${fallbackImg}</div>`;
+                } else {
+                    mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain rounded border mb-4 w-full shadow-sm">`;
+                }
+
+                const div = document.createElement('div');
+                div.className = "card transition-all duration-300 w-full overflow-hidden"; div.id = `question-card-${i}`; 
+                div.innerHTML = `<div class="mb-4"><span class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-xs font-bold uppercase mb-2 inline-block">${q.type === 'mcq' ? 'Trắc nghiệm' : q.type === 'true_false' ? 'Đúng/Sai' : 'Tự luận'}</span><h4 class="font-bold text-gray-800 text-xl">Câu ${i + 1}</h4></div>${mediaHtml}${inputHtml}`;
+                container.appendChild(div);
+            });
+
+            setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
+        }
+
+        window.selectMCQ = (qIdx, opt) => {
+            ['A','B','C','D'].forEach(o => { 
+                let btn = document.getElementById(`btn-mcq-${qIdx}-${o}`);
+                if(btn) btn.classList.remove('selected'); 
+            });
+            let btnSelected = document.getElementById(`btn-mcq-${qIdx}-${opt}`);
+            if(btnSelected) btnSelected.classList.add('selected');
+            
+            let ansEl = document.getElementById(`ans-${qIdx}`);
+            if(ansEl) ansEl.value = opt;
+            
+            updateProgress(qIdx, true);
+        }
+
+        let progressTimeout = null;
+        window.updateProgress = (idx, isAnswered) => {
+            if (!window.currentSessionId || !currentExamData) return;
+            window.currentProgress[idx] = isAnswered;
+            const circle = document.getElementById(`tracker-circle-${idx}`);
+            if (circle) circle.classList.toggle('answered', isAnswered);
+            
+            const allAnswered = window.currentProgress.every(v => v === true);
+            document.getElementById('unanswered-tracker').classList.toggle('translate-y-full', allAnswered);
+
+            if (progressTimeout) clearTimeout(progressTimeout);
+            progressTimeout = setTimeout(() => {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                    progress: window.currentProgress, updatedAt: new Date().toISOString()
+                }).catch(()=>{});
+            }, 1000);
+        }
+
+        window.checkSAProgress = (idx, inputEl) => { updateProgress(idx, inputEl.value.trim().length > 0); }
+        window.checkTFProgress = (idx) => {
+            let answered = [0,1,2,3].some(j => document.getElementById(`tf-${idx}-${j}`).checked);
+            updateProgress(idx, answered);
+        }
+
+        window.initUnansweredTracker = (totalQ) => {
+            const trackerDiv = document.getElementById('unanswered-circles');
+            trackerDiv.innerHTML = '';
+            for (let i = 0; i < totalQ; i++) {
+                const circle = document.createElement('div');
+                circle.id = `tracker-circle-${i}`; circle.className = 'q-circle'; circle.innerText = i + 1;
+                circle.onclick = () => {
+                    const qCard = document.getElementById(`question-card-${i}`);
+                    if(qCard) { qCard.scrollIntoView({ behavior: 'smooth', block: 'center' }); qCard.classList.add('highlight-question', 'border-2', 'border-primary'); setTimeout(() => qCard.classList.remove('highlight-question', 'border-2', 'border-primary'), 1500); }
+                };
+                trackerDiv.appendChild(circle);
+            }
+            document.getElementById('unanswered-tracker').classList.remove('translate-y-full');
+        }
+
+        const startTimer = (minutes) => {
+            let time = minutes * 60; const display = document.getElementById('timer');
+            examTimer = setInterval(() => {
+                const m = Math.floor(time / 60); const s = time % 60;
+                display.innerText = `${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
+                if (time <= 0) { clearInterval(examTimer); customAlert("HẾT THỜI GIAN LÀM BÀI! Tự động nộp bài."); submitExam(); }
+                time--;
+            }, 1000);
+        }
+
+        window.submitExam = async () => {
+            isExamInProgress = false; 
+            document.getElementById('unanswered-tracker').classList.add('translate-y-full');
+            clearInterval(examTimer);
+            document.getElementById('btn-submit').disabled = true; document.getElementById('btn-submit').innerText = "Đang chấm...";
+            exitFullscreen(); document.removeEventListener("visibilitychange", handleVisibilityChange); 
+
+            const questions = currentExamData.shuffledQuestions;
+            const scoring = currentExamData.scoring || {};
+            
+            const s_mcq = parseFloat(scoring.mcq) || 0.25;
+            const s_sa = parseFloat(scoring.sa) || 0.5;
+            const s_tf1 = parseFloat(scoring.tf_1) || 0.1;
+            const s_tf2 = parseFloat(scoring.tf_2) || 0.25;
+            const s_tf3 = parseFloat(scoring.tf_3) || 0.5;
+            const s_tf4 = parseFloat(scoring.tf_4) || 1.0;
+
+            let totalScore = 0; 
+            let userAnswers = []; 
+            const detailedResult = new Array(questions.length).fill(false); 
+            const detailedScores = new Array(questions.length).fill(null);
+
+            questions.forEach((q, i) => {
+                let score = 0; let uAns = null; let isCorrect = false;
+                
+                if (q.type === 'mcq') {
+                    const el = document.getElementById(`ans-${i}`);
+                    uAns = el ? el.value.trim().toUpperCase() : '';
+                    const qAns = String(q.answer || '').trim().toUpperCase();
+                    
+                    if (uAns !== '' && uAns === qAns) { 
+                        score = s_mcq; 
+                        isCorrect = true; 
+                    }
+                } 
+                else if (q.type === 'short_answer') {
+                    const el = document.getElementById(`ans-${i}`);
+                    uAns = el ? el.value.trim() : '';
+                    const normU = uAns.toLowerCase().replace(/\s/g, ''); 
+                    const normA = String(q.answer || '').toLowerCase().replace(/\s/g, '');
+                    
+                    if (normU !== '' && normU === normA) { 
+                        score = s_sa; 
+                        isCorrect = true; 
+                    }
+                } 
+                else if (q.type === 'true_false') {
+                    uAns = []; 
+                    let correctCount = 0;
+                    const validAnswers = q.answers || []; 
+                    
+                    for(let j=0; j<4; j++) {
+                        const cb = document.getElementById(`tf-${i}-${j}`);
+                        const val = (cb && cb.checked) ? 'Đ' : 'S';
+                        uAns.push(val); 
+                        
+                        if (validAnswers[j] && val === String(validAnswers[j]).toUpperCase()) {
+                            correctCount++;
+                        }
+                    }
+                    
+                    if(correctCount === 1) score = s_tf1; 
+                    if(correctCount === 2) score = s_tf2;
+                    if(correctCount === 3) score = s_tf3; 
+                    if(correctCount === 4) { score = s_tf4; isCorrect = true; }
+                }
+
+                totalScore += score;
+                userAnswers.push({ qIdx: i, type: q.type, uAns, score, isCorrect, qData: q });
+                detailedResult[i] = isCorrect;
+                detailedScores[i] = { score: score, max: q.type === 'mcq' ? s_mcq : q.type === 'short_answer' ? s_sa : s_tf4 };
+            });
+
+            if (window.currentSessionId) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', currentExamData.id, 'sessions', window.currentSessionId), {
+                    status: 'completed', score: totalScore, updatedAt: new Date().toISOString()
+                }).catch(()=>{});
+            }
+
+            const submitTime = new Date();
+            let durationStr = "N/A", startTimeStr = "N/A";
+            if (examStartTime) {
+                const diffSecs = Math.floor((submitTime - examStartTime) / 1000);
+                durationStr = `${Math.floor(diffSecs / 60)}p ${diffSecs % 60}s`; 
+                startTimeStr = examStartTime.toISOString();
+            }
+
+            const resultObj = {
+                sbd: document.getElementById('s-sbd').value.trim(),
+                name: document.getElementById('s-name').value, school: document.getElementById('s-school').value, class_: document.getElementById('s-class').value,
+                score: totalScore, violation_count: violationCount, details: detailedResult, detailed_scores: detailedScores, 
+                startedAt: startTimeStr, duration: durationStr, submittedAt: submitTime.toISOString()
+            };
+
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', currentExamData.id), { results: arrayUnion(resultObj) });
+                
+                document.getElementById('taking-exam').classList.add('hidden');
+                document.getElementById('student-result').classList.remove('hidden');
+                
+                // KIỂM TRA ẨN ĐIỂM Ở ĐÂY
+                if (currentExamData.view_score !== false) {
+                    document.getElementById('score-display-box').classList.remove('hidden'); 
+                    document.getElementById('score-hidden-msg').classList.add('hidden');
+                    document.getElementById('final-score').innerText = totalScore.toFixed(2);
+                } else { 
+                    document.getElementById('score-display-box').classList.add('hidden'); 
+                    document.getElementById('score-hidden-msg').classList.remove('hidden'); 
+                }
+                
+                if (currentExamData.allow_review) {
+                    const container = document.getElementById('review-questions'); document.getElementById('review-section').classList.remove('hidden');
+                    userAnswers.forEach((item, i) => {
+                        const q = item.qData; 
+                        const div = document.createElement('div');
+                        div.className = `p-4 rounded border-l-4 mb-4 ${item.isCorrect ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`;
+                        
+                        let mediaHtml = '';
+                        if (q.is_latex) {
+                            let optionsHtml = '';
+                            if (q.q_options && q.q_options.length > 0) {
+                                if (q.type === 'mcq') {
+                                    optionsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">${['A','B','C','D'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2">${opt}.</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
+                                } else if (q.type === 'true_false') {
+                                    optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-3 border rounded-lg bg-gray-50 flex"><b class="mr-2 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div>`).join('')}</div>`;
+                                }
+                            }
+                            let fallbackImg = '';
+                            if (q.img_data) fallbackImg = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain mt-4 mx-auto rounded border shadow-sm block w-full md:w-auto">`;
+                            let fallbackSImg = '';
+                            if (q.da_img_data) fallbackSImg = `<br><img src="data:image/png;base64,${q.da_img_data}" class="max-h-64 object-contain mt-2 mx-auto rounded border shadow-sm block w-full md:w-auto">`;
+
+                            mediaHtml = `<div class="text-gray-800 text-base mb-2 p-4 bg-white rounded latex-content border border-gray-200 block break-words whitespace-normal w-full overflow-x-hidden">${q.q_text}${fallbackImg}</div>${optionsHtml}`;
+                            if (q.s_text || fallbackSImg) mediaHtml += `<div class="text-gray-800 text-sm p-4 bg-green-50/50 rounded latex-content border border-green-200 mt-4"><b>Lời giải:</b><br>${q.s_text}${fallbackSImg}</div>`;
+                        } else {
+                            mediaHtml = `<img src="data:image/png;base64,${q.img_data}" class="max-h-32 object-contain my-2">${q.da_img_data ? `<img src="data:image/png;base64,${q.da_img_data}" class="max-h-40 border rounded mt-1">` : ''}`;
+                        }
+
+                        div.innerHTML = `<div class="flex justify-between mb-3"><span class="font-bold text-gray-700">Câu ${i+1}</span><span class="font-bold ${item.score > 0 ? 'text-green-600' : 'text-red-600'}">+${item.score.toFixed(2)} đ</span></div>${mediaHtml}`;
+                        container.appendChild(div);
+                    });
+                    
+                    setTimeout(() => { if (window.MathJax) MathJax.typesetPromise(); }, 100);
+                }
+            } catch (e) { customAlert("Lỗi nộp bài: " + e.message); }
+        }
+
+        /* --- XỬ LÝ LIVE TRACKING (GIÁO VIÊN) --- */
+        window.startLiveTracking = async () => {
+            if (!isFirebaseConfigured()) return customAlert("Lỗi: Firebase chưa được cấu hình.");
+            const examId = document.getElementById('live-exam-id').value.trim().toUpperCase();
+            if (!examId) return customAlert("Vui lòng nhập mã đề!");
+
+            const container = document.getElementById('live-tracking-container');
+            const listContainer = document.getElementById('live-students-list');
+            
+            container.classList.remove('hidden');
+            listContainer.innerHTML = '<p class="text-gray-500 italic text-center w-full py-4 animate-pulse">Đang kết nối hệ thống thời gian thực...</p>';
+
+            try {
+                const docSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_exams', examId));
+                if (!docSnap.exists()) throw new Error("Mã đề không tồn tại!");
+                const qCount = docSnap.data().question_count;
+
+                if (liveUnsubscribe) { liveUnsubscribe(); liveUnsubscribe = null; }
+
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', examId, 'sessions'));
+
+                liveUnsubscribe = onSnapshot(q, (snapshot) => {
+                    let activeCount = 0; let doneCount = 0;
+                    
+                    if (snapshot.empty) {
+                        document.getElementById('live-active-count').innerText = 0;
+                        document.getElementById('live-done-count').innerText = 0;
+                        listContainer.innerHTML = '<p class="text-gray-500 italic text-center w-full py-4">Chưa có học sinh nào tham gia.</p>';
+                        return;
+                    }
+
+                    let html = '';
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        if (data.status === 'testing') activeCount++;
+                        if (data.status === 'completed') doneCount++;
+
+                        const progress = data.progress || [];
+                        const answeredCount = progress.filter(x => x === true).length;
+                        const pct = qCount > 0 ? (answeredCount / qCount) * 100 : 0;
+                        const timeStr = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : '';
+                        
+                        const borderColor = data.status === 'completed' ? 'border-gray-400 opacity-80' : 'border-green-700';
+
+                        html += `
+                            <div class="bg-white rounded-lg border-l-[5px] ${borderColor} shadow-sm p-4 w-[280px] flex flex-col gap-2 relative transition-all duration-300">
+                                <div class="font-bold text-gray-800 text-[15px] uppercase truncate pr-4" title="${data.name}">${data.name}</div>
+                                <div class="text-xs text-gray-500 font-medium mt-[-5px]">SBD: ${data.sbd || 'N/A'} - Lớp ${data.class_ || ''}</div>
+                                
+                                <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                                    <div class="bg-green-700 h-1.5 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+                                </div>
+                                
+                                <div class="flex justify-between items-center text-xs text-gray-700 font-medium mt-1">
+                                    <span>Đã làm ${answeredCount}/${qCount}</span>
+                                    <span class="${data.violation_count > 0 ? 'text-red-600 font-bold' : ''}">Vi phạm ${data.violation_count || 0}</span>
+                                </div>
+                                
+                                ${data.status === 'completed' ? `
+                                    <div class="text-xs font-bold text-gray-800 mt-1">Đã nộp ${timeStr},${(data.score || 0).toFixed(2)} điểm</div>
+                                ` : ''}
+                                
+                                <div class="mt-2">
+                                    <button onclick="resetAttempt('${examId}', '${doc.id}')" class="text-[11px] border border-gray-300 rounded-md px-3 py-1 hover:bg-gray-100 text-gray-700 font-semibold shadow-sm">Cấp lại lượt</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    document.getElementById('live-active-count').innerText = activeCount;
+                    document.getElementById('live-done-count').innerText = doneCount;
+                    listContainer.innerHTML = html;
+                    
+                }, (error) => { listContainer.innerHTML = `<p class="text-red-500 italic text-center py-4">Mất kết nối. Thử lại sau.</p>`; });
+
+            } catch (e) { listContainer.innerHTML = `<p class="text-red-500 italic text-center py-4">Lỗi: ${e.message}</p>`; }
+        };
+
+        window.zoomLiveTracking = (delta) => {
+            if (delta === 0) window.liveTrackingZoomLevel = 1.0; 
+            else window.liveTrackingZoomLevel = Math.max(0.5, Math.min(2.0, window.liveTrackingZoomLevel + delta));
+            
+            const listContainer = document.getElementById('live-students-list');
+            const levelDisplay = document.getElementById('live-zoom-level-display');
+            
+            if(listContainer) {
+                if ('zoom' in listContainer.style) listContainer.style.zoom = window.liveTrackingZoomLevel;
+                else { listContainer.style.transform = `scale(${window.liveTrackingZoomLevel})`; listContainer.style.transformOrigin = '0 0'; }
+            }
+            if(levelDisplay) levelDisplay.innerText = Math.round(window.liveTrackingZoomLevel * 100) + '%';
+        }
+
+        window.resetAttempt = async (examId, sessionId) => {
+            if (!confirm("Xác nhận xóa bài và cấp lại lượt làm bài cho học sinh này?")) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_tracking', examId, 'sessions', sessionId));
+                customAlert("Đã xóa phiên làm bài. Cấp lại lượt thành công!");
+            } catch (e) { customAlert("Lỗi cấp lại lượt: " + e.message); }
+        }
+
+        window.forceSubmitAll = () => { customAlert("Tính năng tự chốt bài hoạt động dựa trên cấu hình 'Thời gian đóng đề' khi tạo đề thi."); }
+
+        /* --- XỬ LÝ XEM KẾT QUẢ --- */
+        const renderScoreChart = (results, examId) => {
+            const chartContainer = document.getElementById('results-chart-container'); const chartCanvas = document.getElementById('scoreChart');
+            if (results.length === 0) { chartContainer.classList.add('hidden'); return; }
+            chartContainer.classList.remove('hidden'); if (scoreChartInstance) scoreChartInstance.destroy();
+            const labels = results.map(r => r.name); const data = results.map(r => r.score);
+            const maxScore = results.length > 0 ? Math.ceil(Math.max(...data)) : 0;
+            scoreChartInstance = new Chart(chartCanvas, {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: 'Tổng Điểm', data: data, backgroundColor: '#04CCCC', borderRadius: 5 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: Math.min(10, Math.max(maxScore + 1, 10)) } }, plugins: { legend: { display: false } } }
+            });
+        }
+
+        const renderQuestionAnalysisChart = (results, examId) => {
+            const chartContainer = document.getElementById('question-chart-container'); const chartCanvas = document.getElementById('questionChart');
+            const sample = results.find(r => r.details && Array.isArray(r.details));
+            if (!sample) { chartContainer.classList.add('hidden'); return; }
+            chartContainer.classList.remove('hidden'); if (questionChartInstance) questionChartInstance.destroy();
+            const stats = Array.from({length: sample.details.length}, () => ({ count: 0 }));
+            results.forEach(r => { if (r.details) r.details.forEach((isCorrect, idx) => { if (isCorrect) stats[idx].count++; }); });
+            
+            questionChartInstance = new Chart(chartCanvas, {
+                type: 'bar',
+                data: { 
+                    labels: stats.map((_, i) => `Câu ${i + 1}`), 
+                    datasets: [{ 
+                        label: 'Số học sinh làm đúng', 
+                        data: stats.map(s => s.count), 
+                        backgroundColor: '#FF9F43', 
+                        hoverBackgroundColor: '#E68A35',
+                        borderRadius: 5 
+                    }] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }, 
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: (ctx) => `Câu ${ctx[0].dataIndex + 1} (Bấm để xem đề bài)`
+                            }
+                        }
+                    },
+                    onHover: (event, chartElement) => {
+                        event.native.target.style.cursor = chartElement.length > 0 ? 'pointer' : 'default';
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const questionIndex = elements[0].index;
+                            window.showQuestionReviewChart(examId, questionIndex);
+                        }
+                    }
+                }
+            });
+        }
+
+        window.showQuestionReviewChart = async (examId, qIndex) => {
+            const modal = document.getElementById('question-review-modal');
+            const contentDiv = document.getElementById('review-modal-content');
+            const title = document.getElementById('review-modal-title');
+
+            title.innerHTML = `<span class="text-2xl">🔍</span> Chi tiết Câu ${qIndex + 1}`;
+            contentDiv.innerHTML = `<div class="flex flex-col justify-center items-center py-12"><div class="animate-spin rounded-full h-10 w-10 border-b-4 border-primary mb-3"></div><p class="text-gray-500 font-medium">Đang tải câu hỏi...</p></div>`;
+            modal.classList.remove('hidden');
+
+            try {
+                // Lấy dữ liệu của câu hỏi từ Firebase dựa vào mã đề và index
+                const qDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_questions', `${examId}_${qIndex}`));
+                
+                if (!qDoc.exists()) {
+                    contentDiv.innerHTML = '<p class="text-red-500 text-center py-10 font-bold">Không tìm thấy dữ liệu câu hỏi trên hệ thống.</p>';
+                    return;
+                }
+                
+                const q = qDoc.data();
+                let mediaHtml = '';
+                
+                // Logic render câu hỏi tương tự như phần xem lại bài của học sinh
+                if (q.is_latex) {
+                    let optionsHtml = '';
+                    if (q.q_options && q.q_options.length > 0) {
+                        if (q.type === 'mcq') {
+                            optionsHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">${['A','B','C','D'].map((opt, idx) => {
+                                const isAns = String(q.answer).toUpperCase() === opt;
+                                return `<div class="p-3 border-2 rounded-lg ${isAns ? 'bg-green-50 border-green-400 shadow-sm' : 'bg-gray-50 border-gray-100'} flex"><b class="mr-2 ${isAns ? 'text-green-700' : ''}">${opt}.</b><span class="latex-content ${isAns ? 'font-medium' : ''}">${q.q_options[idx]}</span>${isAns ? '<span class="ml-auto text-green-600">✅</span>' : ''}</div>`
+                            }).join('')}</div>`;
+                        } else if (q.type === 'true_false') {
+                            optionsHtml = `<div class="grid grid-cols-1 gap-2 mt-4">${['a','b','c','d'].map((opt, idx) => `<div class="p-4 border rounded-lg bg-gray-50 flex justify-between items-center"><div class="flex"><b class="mr-3 whitespace-nowrap">Ý ${opt}:</b><span class="latex-content">${q.q_options[idx]}</span></div><span class="font-bold text-lg px-3 py-1 rounded bg-white shadow-sm text-primary border">${q.answers && q.answers[idx] ? q.answers[idx] : ''}</span></div>`).join('')}</div>`;
+                        }
+                    }
+                    
+                    let fallbackImg = '';
+                    if (q.img_data) fallbackImg = `<img src="data:image/png;base64,${q.img_data}" class="max-h-64 object-contain mt-4 mx-auto rounded border shadow-sm block w-full md:w-auto">`;
+                    let fallbackSImg = '';
+                    if (q.da_img_data) fallbackSImg = `<br><img src="data:image/png;base64,${q.da_img_data}" class="max-h-64 object-contain mt-3 mx-auto rounded border shadow-sm block w-full md:w-auto">`;
+
+                    mediaHtml = `<div class="text-gray-800 text-lg mb-2 p-5 bg-white rounded-xl latex-content border border-gray-200 block break-words whitespace-normal w-full overflow-x-hidden shadow-sm leading-relaxed">${q.q_text}${fallbackImg}</div>${optionsHtml}`;
+                    
+                    if (q.s_text || fallbackSImg) {
+                        mediaHtml += `<div class="text-gray-800 text-base p-5 bg-green-50 rounded-xl latex-content border border-green-200 mt-6 shadow-sm"><h4 class="font-bold text-green-800 mb-2 border-b border-green-200 pb-2">💡 Hướng dẫn giải:</h4><div class="leading-relaxed">${q.s_text}</div>${fallbackSImg}</div>`;
+                    } else if (q.type === 'short_answer') {
+                        mediaHtml += `<div class="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl"><b class="text-green-800">Đáp án chính xác:</b> <span class="font-bold text-lg text-green-700 ml-2">${q.answer}</span></div>`;
+                    }
+                } else {
+                    // Nếu là câu hỏi Ảnh
+                    mediaHtml = `
+                        <div class="p-4 border rounded-xl shadow-sm bg-gray-50 mb-4">
+                            <h4 class="font-bold text-gray-700 mb-2">Đề bài:</h4>
+                            <img src="data:image/png;base64,${q.img_data}" class="w-full object-contain border rounded-lg bg-white">
+                        </div>
+                        ${q.da_img_data 
+                            ? `<div class="p-4 border rounded-xl shadow-sm bg-green-50"><h4 class="font-bold text-green-800 mb-2">Lời giải chi tiết:</h4><img src="data:image/png;base64,${q.da_img_data}" class="w-full object-contain border rounded-lg bg-white"></div>` 
+                            : `<div class="p-4 bg-green-50 border border-green-200 rounded-xl mt-4"><b class="text-green-800">Đáp án chính xác:</b> <span class="font-bold text-lg text-green-700 ml-2">${q.answer || q.answers?.join(' ')}</span></div>`
+                        }
+                    `;
+                }
+
+                contentDiv.innerHTML = mediaHtml;
+                
+                // Gọi MathJax để render lại công thức Toán học trong Popup
+                setTimeout(() => { 
+                    if (window.MathJax) MathJax.typesetPromise([contentDiv]); 
+                }, 100);
+
+            } catch (err) {
+                contentDiv.innerHTML = `<p class="text-red-500 text-center py-10">Lỗi khi lấy dữ liệu: ${err.message}</p>`;
+            }
+        }
+
+        window.loadResults = async () => {
+            if (!isFirebaseConfigured()) return customAlert("Lỗi: Firebase chưa được cấu hình.");
+            const examId = document.getElementById('result-exam-id').value.trim().toUpperCase();
+            if (!examId) return customAlert("Vui lòng nhập mã đề");
+
+            const container = document.getElementById('results-table-container');
+            
+            Array.from(container.children).forEach(child => { 
+                if (child.id !== 'results-chart-container' && child.id !== 'question-chart-container' && child.id !== 'empty-results-text') {
+                    child.remove(); 
+                }
+            });
+            document.getElementById('empty-results-text').classList.add('hidden');
+
+            try {
+                const docSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'itex_results', examId));
+                if (!docSnap.exists()) {
+                    document.getElementById('empty-results-text').classList.remove('hidden');
+                    document.getElementById('results-chart-container').classList.add('hidden');
+                    document.getElementById('question-chart-container').classList.add('hidden');
+                    return;
+                }
+                
+                const results = docSnap.data().results || [];
+                if (results.length === 0) {
+                    document.getElementById('empty-results-text').classList.remove('hidden');
+                    document.getElementById('results-chart-container').classList.add('hidden');
+                    document.getElementById('question-chart-container').classList.add('hidden');
+                    return;
+                }
+                
+                results.sort((a, b) => b.score - a.score);
+                renderScoreChart(results, examId); renderQuestionAnalysisChart(results, examId);
+
+                let htmlTable = `
+                    <div class="mb-4 flex justify-between items-center mt-6">
+                        <span class="font-bold text-gray-700">Tổng: ${results.length} bài nộp</span>
+                        <button onclick="exportExcel('${examId}')" class="btn bg-green-600 text-sm hover:bg-green-700 shadow">📤 Xuất Excel</button>
+                    </div>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+                        <table class="min-w-full bg-white text-sm">
+                            <thead class="bg-gray-100 text-gray-700">
+                                <tr>
+                                    <th class="py-3 px-4 border-b text-left">SBD</th>
+                                    <th class="py-3 px-4 border-b text-left">Học sinh</th>
+                                    <th class="py-3 px-4 border-b text-left">Lớp</th>
+                                    <th class="py-3 px-4 border-b text-left">Trường</th>
+                                    <th class="py-3 px-4 border-b text-center font-bold text-primary">Điểm</th>
+                                    <th class="py-3 px-4 border-b text-center text-red-500">Vi phạm</th>
+                                    <th class="py-3 px-4 border-b text-center">Bắt đầu</th>
+                                    <th class="py-3 px-4 border-b text-center">Làm bài</th>
+                                    <th class="py-3 px-4 border-b text-right">Thời gian nộp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                results.forEach(r => {
+                    let startTimeDisplay = '-';
+                    if (r.startedAt && r.startedAt !== 'N/A') {
+                        const d = new Date(r.startedAt); startTimeDisplay = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                    }
+                    htmlTable += `
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="py-3 px-4 border-b text-gray-800 font-semibold">${r.sbd || '-'}</td>
+                            <td class="py-3 px-4 border-b font-medium text-gray-800">${r.name}</td>
+                            <td class="py-3 px-4 border-b text-gray-600">${r.class_}</td>
+                            <td class="py-3 px-4 border-b text-gray-600">${r.school}</td>
+                            <td class="py-3 px-4 border-b text-center font-bold text-lg text-primary">${r.score.toFixed(2)}</td>
+                            <td class="py-3 px-4 border-b text-center text-red-500 font-bold">${r.violation_count || 0}</td>
+                            <td class="py-3 px-4 border-b text-center text-gray-600">${startTimeDisplay}</td>
+                            <td class="py-3 px-4 border-b text-center font-semibold text-gray-700">${r.duration || '-'}</td>
+                            <td class="py-3 px-4 border-b text-right text-gray-500">${new Date(r.submittedAt).toLocaleString('vi-VN')}</td>
+                        </tr>
+                    `;
+                });
+                
+                htmlTable += '</tbody></table></div>';
+                const summaryDiv = document.createElement('div'); summaryDiv.innerHTML = htmlTable;
+                container.appendChild(summaryDiv);
+                window.currentResults = results;
+
+            } catch (e) { customAlert("Lỗi tải kết quả: " + e.message); }
+        }
+
+        window.exportExcel = (examId) => {
+            if (!window.currentResults) return;
+            const ws = XLSX.utils.json_to_sheet(window.currentResults.map(r => ({
+                "SBD": r.sbd || '-',
+                "Họ Tên": r.name, "Lớp": r.class_, "Trường": r.school, "Điểm": r.score,
+                "Số lần vi phạm": r.violation_count || 0,
+                "Bắt đầu": r.startedAt && r.startedAt !== 'N/A' ? new Date(r.startedAt).toLocaleString('vi-VN') : '-',
+                "Thời gian làm bài": r.duration || '-',
+                "Thời gian nộp": new Date(r.submittedAt).toLocaleString('vi-VN')
+            })));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "KetQua");
+            XLSX.writeFile(wb, `KetQua_DiemThi_${examId}.xlsx`);
+        }
+    </script>
+</body>
+</html>
